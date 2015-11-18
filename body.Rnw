@@ -1,0 +1,1147 @@
+\section{Reworked analyses and figure drafts for paper1 after JEB reviews}
+
+<<echo=F,results='markup',comment=NA>>=
+if (!(require(Hmisc)&require(lme4)&require(lattice)&require(compiler)&require(car)))
+    {
+        stop("a library is missing")
+    }
+enableJIT(3)
+#source("~/GoogleDrive/unpak-database/tairData/src/const.R")
+source("superhist2.R")
+csvdir <- "csvinputs"
+INCLUDE.GERM <- T
+germin <- read.csv(file=paste(csvdir,"germination-datasets.csv",sep="/"),header=T)
+@ 
+
+<<echo=F,results='markup',comment=NA>>=
+if (!file.exists("taircache.rda")) #if taircache does not exist, it has to be rebuilt by running the lines in the block below by hand, at this point (at least I think so)
+  {
+      download=F
+      output=T
+      source(paste(srcdir,"create-tair-salk-db.R",sep="/"))
+      save(file="taircache.rda",
+           tair,salk,genos,GO,all.confirmed.lines,confirmed.with.fam,confirmed.with.ont.geno,confirmed.with.ontology)
+  } else {
+      load("taircache.rda")
+  }
+
+confirmed.with.fam$SALK_Line <- as.character(confirmed.with.fam$SALK_Line)
+confirmed.with.fam$SALK_Line <- toupper(confirmed.with.fam$SALK_Line)
+cwf <- confirmed.with.fam #make a new dataframe
+cwf <- unique(cwf[!is.na(cwf$SALK_Line),]) #start to remove duplicate lines
+
+dim(germin)[1]
+
+germin$SALK_Line <- toupper(as.character(germin$SALK_line))
+germ.gene.families <- merge(germin,cwf,all.x=T)
+
+germ.gene.families$GeneFamilyName <- germ.gene.families$Gene_Family
+germ.gene.families <- germ.gene.families[with(germ.gene.families,order(SALK_Line,GeneFamilyName)),]
+
+oldSALK <- germ.gene.families$SALK_Line[1]
+germ.gene.families$delfield <- rep(0,dim(germ.gene.families)[1])
+for (i in 2:dim(germ.gene.families)[1])
+  {
+    if ((germ.gene.families$SALK_Line[i]==oldSALK)&(oldSALK!="SALK_CS60000"))
+      {
+        germ.gene.families$delfield[i] <- 1
+      } else {
+        oldSALK <- germ.gene.families$SALK_Line[i]
+      }
+  }
+
+germ.gene.families <- germ.gene.families[germ.gene.families$delfield<1,]
+germ.gene.families$GeneFamilyName <- as.character(germ.gene.families$GeneFamilyName)
+germ.gene.families$GeneFamilyName[germ.gene.families$SALK_Line=="SALK_CS60000"] <- "Control"
+
+germ.gene.families$cntrl <- with(germ.gene.families,as.factor(ifelse((GeneFamilyName=="Control"),"Control","Treatments")))
+
+write.table(file=paste(csvdir,"abbrev.csv",sep="/"),data.frame(abbrev=unique(abbreviate(germ.gene.families$GeneFamilyName)),name=unique(germ.gene.families$GeneFamilyName)),sep=",",row.names=F)
+write.table(file=paste(csvdir,"germination-families.csv",sep="/"),germ.gene.families,sep=",",row.names=F)
+
+means <- with(germ.gene.families,aggregate(percent,by=list(GeneFamilyName=GeneFamilyName),mean,na.rm=T))
+names(means)[2] <- "mn"
+len <- with(germ.gene.families,aggregate(percent,by=list(GeneFamilyName=GeneFamilyName),length))
+names(len)[2] <- "n"
+sds <- with(germ.gene.families,aggregate(percent,by=list(GeneFamilyName=GeneFamilyName),sd,na.rm=T))
+names(sds)[2] <- "sd"
+
+sum.stat <- merge(means,merge(len,sds))
+sum.stat$se <- sum.stat$sd/sqrt(sum.stat$n)
+sum.stat$GeneFamilyName <- as.character(sum.stat$GeneFamilyName)
+tmp <- as.data.frame(table(GeneFamilyName=tair$Gene_Family))
+tmp$GeneFamilyName <- as.character(tmp$GeneFamilyName)
+sum.stat <- merge(sum.stat,tmp)
+
+write.table(file=paste(csvdir,"summary.by.family.csv",sep="/"),sum.stat,sep=',',row.names=F)
+
+per.rep <- read.csv(file=paste(csvdir,"tag-line-map.csv",sep="/"),header=T)
+per.rep <- per.rep[per.rep$line!="NOT-USED",c(-2,-6)]
+per.rep$SALK_Line <- as.character(per.rep$SALK_Line)
+per.rep$SALK_Line[per.rep$SALK_Line=="CS60000"] <- "SALK_CS60000"
+per.rep$SALK_Line <- unlist(lapply(strsplit(per.rep$SALK_Line,"-"),function(x){x[1]}))
+per.rep$treat <- rep("treat",dim(per.rep)[1])
+per.rep$treat[per.rep$SALK_Line=="SALK_CS60000"] <- "control"
+ggf <- germ.gene.families[germ.gene.families$SALK_Line!="SALK_CS60000",]
+ggf2 <- germ.gene.families[germ.gene.families$SALK_Line=="SALK_CS60000",]
+ggf <- rbind(ggf,ggf2[1,])
+rm(ggf2)
+
+per.rep.merg <- merge(merge(per.rep,ggf),sum.stat[,c(-2:-5)],all.x=T)
+write.table(file=paste(csvdir,"survival-by-rep.csv",sep="/"),sep=',',row.names=F,per.rep.merg)
+
+surv.by.fam <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamilyName=GeneFamilyName),mean))
+names(surv.by.fam)[2] <- "mean.survival"
+surv.by.fam.n <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamilyName=GeneFamilyName),length))
+surv.by.fam$n <- surv.by.fam.n$x
+surv.by.fam.sd <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamilyName=GeneFamilyName),sd))
+surv.by.fam$sd <- surv.by.fam.n$x
+
+numlines <- with(per.rep.merg,aggregate(SALK_Line,
+                                        by=list(GeneFamilyName=GeneFamilyName),function(x){length(unique(x))}))
+names(numlines)[2] <- "num.lines"
+surv.by.fam <- merge(surv.by.fam,numlines)
+
+surv.by.fam <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamilyName=GeneFamilyName,SALK_Line=SALK_Line),mean))
+names(surv.by.fam)[3] <- "mean.survival"
+surv.by.fam.n <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamilyName=GeneFamilyName,SALK_Line=SALK_Line),length))
+surv.by.fam$n <- surv.by.fam.n$x
+surv.by.fam.sd <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamilyName=GeneFamilyName,SALK_Line=SALK_Line),sd))
+surv.by.fam$sd <- surv.by.fam.n$x
+@ 
+
+\subsection{Some obvious comparisons}
+
+\subsubsection{Germination rate as a function of gene-family}
+
+<<echo=F,fig.keep='none',comment=NA>>=
+ ## Increase bottom margin to make room for rotated labels
+par(mar = c(7, 4, 4, 2) + 0.1)
+      ## Create plot with no x axis and no x axis label
+bp=boxplot(percent~as.factor(abbreviate(GeneFamilyName)),data=germ.gene.families,varwidth=T,horizontal=F,axes=F,ylab="Germination percentage")
+      ## Set up x axis with tick marks alone
+axis(2)
+axis(1, labels = FALSE)
+      ## Plot x axis labels at default tick marks
+text(1:length(bp$names), par("usr")[3] - 0.25, srt = 45, adj = 1,
+     labels = bp$names, xpd = TRUE)
+      ## Plot x axis label at line 6 (of 7)
+mtext(1, text = "Gene Family", line = 6)
+par(mar=c(5,4,4,2)+0.1)
+ 
+@ 
+
+
+And here's another test of the same hypothesis using permutation
+approach (may be less affected by unequal var).
+
+<<echo=F,comment=NA>>=
+tobs <- t.test(percent~cntrl,data=germ.gene.families)$statistic
+tperm <- NULL
+for (i in 1:1000)
+  {
+    tperm <- c(tperm,
+               t.test(percent~sample(cntrl,length(cntrl),replace=F),data=germ.gene.families)$statistic
+               )
+  }
+
+print("typeI prob:")
+print(sum(tperm>tobs)/length(tperm))
+
+@ 
+
+\subsection{Survival to harvest as a function of gene family}
+
+Here are analyses that examine the effect of gene family upon survival:
+
+<<echo=F,comment=NA>>=
+summary(aov(mean.survival~GeneFamilyName,data=surv.by.fam))
+@ 
+
+\subsection{Read in the salk copy numbers and process}
+
+
+
+<<echo=F,comment=NA>>=
+#fold in fitness data
+fitin <- read.csv(paste(csvdir,"RedundancyExperiment1-final.csv",sep="/"),header=T)
+
+### IMPORTANT ASSUMES FIRST COL IS TAGNUM
+names(fitin)[1] <- "tagnum"
+fitmerg <- merge(fitin,per.rep.merg,all.x=T,all.y=T)
+names(fitmerg)[which(names(fitmerg)=="gene.family.size")] <- "FamilySize"
+fitmerg$propabort <- fitmerg$abortn/(fitmerg$fruitnum+fitmerg$abortn)
+fitmerg$fitness <- ifelse((is.na(fitmerg$fruitnum)&(!fitmerg$alive.at.harvest)),fitmerg$alive.at.harvest,fitmerg$fruitnum)
+if (INCLUDE.GERM) {fitmerg$fitness <- fitmerg$fitness*(fitmerg$percent/100)}
+fitmerg <- fitmerg[!is.na(fitmerg$fitness),]
+
+fitmerg$fitdev <- fitmerg$fitness-mean(fitmerg$fitness[fitmerg$cntrl=="Control"],na.rm=T)
+fitmerg$fitdevng <- fitmerg$fruitnum-mean(fitmerg$fruitnum[fitmerg$cntrl=="Control"],na.rm=T)
+###################
+#add in the copy number data
+#
+#salk.copy.num <- read.csv(paste(csvdir,"mean-ratios-pilot.csv",sep="/"),as.is=T)
+salk.copy.num <- read.csv(paste(csvdir,"mean-ratios-SALK.csv",sep="/"),as.is=T)
+pilot.copy.num <- read.csv(paste(csvdir,"mean-ratios-pilot.csv",sep="/"),as.is=T)
+pilot.copy.num$failedN <- NA
+#salk.copy.num <- rbind(salk.copy.num,pilot.copy.num[which(!(pilot.copy.num$SALK_Line%in%salk.copy.num$SALK_Line)),names(salk.copy.num)])
+#salk.copy.num <- salk.copy.num[salk.copy.num$endolocus=="PetC",]
+salk.copy.num <- pilot.copy.num
+fam.classes <- read.csv(paste(csvdir,"classification-final.csv",sep="/"),header=T)
+fam.classes$Gene_Family <- fam.classes$GeneFamilyName
+
+
+fitmerg <- merge(fitmerg,salk.copy.num[,c("SALK_Line","area.ratio","ratiocat","littleN","failedN","endo.area","tdna.area")],all.x=T)
+fitmerg <- merge(fitmerg,fam.classes,all.x=T)
+
+fitmerg$SuperGeneFamilyName <- as.character(fitmerg$Gene_Family)
+fitmerg$SuperGeneFamilyName[is.na(fitmerg$SuperGeneFamilyName)|(fitmerg$SuperGeneFamilyName=="NULL")] <- 
+  fitmerg$GeneFamilyName[is.na(fitmerg$SuperGeneFamilyName)|(fitmerg$SuperGeneFamilyName=="NULL")]
+fsdf <- unique(with(fitmerg,(data.frame(FamilySize,SuperGeneFamilyName))))
+fsdf$FamilySize <- as.numeric(as.character(fsdf$FamilySize))
+SFsize <- with(fsdf,aggregate(FamilySize,by=list(SuperGeneFamilyName=SuperGeneFamilyName),sum))
+names(SFsize)[2] <- "SFamilySize"
+fitmerg <- merge(fitmerg,SFsize,all.x=T)
+
+fruit.by.line <- with(fitmerg,
+                     aggregate(cbind(fitness, fitdev, fitdevng, propabort,FamilySize),
+                               by=list(SALK_Line=SALK_Line),mean,na.rm=T)
+                     )
+
+fruit.by.family <- with(fitmerg,
+                     aggregate(cbind(fitness, fitdev, fitdevng, propabort,FamilySize,alive.at.harvest),
+                               by=list(GeneFamilyName=GeneFamilyName),mean,na.rm=T)
+                     )
+
+fruit.by.line <- merge(fruit.by.line,unique(fitmerg[,c("SALK_Line","area.ratio","ratiocat","Regulatory")]))
+
+print(dim(fruit.by.line))
+
+fruit.by.family <- merge(fruit.by.family,unique(fitmerg[,c(1,2,3,21,44,45,47,48,49,50,51,52)]))
+
+
+fitmads <- fitmerg[(fitmerg$GeneFamilyName=="MADS-box Transcription Factor Family") |
+                   (fitmerg$GeneFamilyName=="Control"), ]
+
+
+@ 
+\section{Distribution of mutations}
+This is a redraw of the theoretical figure (fig 1) using R code:
+
+<<theory-predict,dev=c('pdf','postscript','CairoPNG'),echo=F,fig.keep='none',out.width='"0.6\\fullwidth"',comment=NA>>=
+#xfig("theory.fig")
+d=seq(0.00,1,0.01)
+exp.height=dexp(0,10)/100
+plot(dbeta(sort(d,decreasing=T),1.9,6.4)~d,type="l",axes=F,xlab="Fitness",ylab="", xlim=c(0,1.5),lwd=3, cex.lab=1.5)
+mtext("Frequency of mutant lines",2,1,cex=1.5)
+mtext("Ancestor's\nfitness",1,1.3,at=1,cex=1.2)
+mtext("Low",1,0.5,at=0.1,cex=1.2)
+mtext("High",1,0.5,at=1.4,cex=1.2)
+mtext("Distribution of mutant lines' fitness\nrelative to ancestor",3,1,cex=1.7)
+box()
+@ 
+
+
+Here are various figures emphasizing variation among mutant lines
+compared to controls.  In this first figure, the distribution of line
+means is plotted with the distribution of all control plants as well
+as 116 resampled means of control replicates equal in size to the
+average number of reps per SALK line
+
+<<compare-to-control3,echo=F,fig.keep='none',dev=c('pdf','postscript','CairoPNG'),comment=NA,cache=F>>=
+
+fruit.by.line$cntrl <- ifelse(fruit.by.line$SALK_Line=="SALK_CS60000",T,F)
+
+repcnt <- with(fitmerg,aggregate(fitdev,by=list(SALK_Line=SALK_Line),length))
+names(repcnt)[2] <- "reps"
+fitmerg <- merge(fitmerg,repcnt)
+avg.reps <- mean(fitmerg$reps[(fitmerg$reps>1)&(as.character(fitmerg$SALK_Line)!="SALK_CS60000")])
+fitline <- with(fitmerg[(fitmerg$reps>1),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
+###fitline <- with(fitmerg[(fitmerg$reps>1)&(as.character(fitmerg$SALK_Line)!="SALK_CS60000"),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
+names(fitline)[2] <- "fitdev"
+
+numreps <- 10*dim(fitline)[1]
+cntrlmeans <- rep(0,numreps)
+for (i in 1:numreps)
+  {
+    cntrlmeans[i] <- mean(
+                          sample(fitmerg$fitdev[as.character(fitmerg$SALK_Line)=="SALK_CS60000"],
+                                 size=round(avg.reps)
+                                 )
+                          )
+  }
+cntrls <- fitmerg$fitdev[as.character(fitmerg$SALK_Line)=="SALK_CS60000"]
+
+#
+#make the figure
+#
+
+addq <- function(quant,ctmn,ctsd)
+  {
+    points(x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),2)),
+           y=c(0,0.03),type="l",col="red")
+    text(paste(quant),
+         x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),1)),y=c(0.031))
+  }
+
+superhist2(list(fitline[,2],cntrlmeans,cntrls),main="Difference in fitnesses and control mean",nbreaks=10,ylab="",xlab="Fitness deviation from control",cex.lab=1.5,cex.axis=1.3)
+
+
+
+fitline.alldata <- merge(fitline,fitmerg[,-which(names(fitmerg)%in%c("fitdev"))],all.x=T)
+fitline.alldata <- fitline.alldata[order(fitline.alldata$fitdev),]
+write.table(file=paste(csvdir,"fitlines.csv",sep="/"),fitline.alldata,row.names=F,col.names=T,sep=',')
+
+fitline.alldata$flowers <- with(fitline.alldata,fruitnum+abortn+fruits.removed)
+
+@ 
+
+This figure compares just the resampled means to the SALK line means
+
+<<fig1-compare-to-control,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),comment=NA>>=
+par(mar=c(5,5,1,1)+0.1)
+
+superhist2(list(cntrlmeans,fitline[,2]),main="",nbreaks=10,ylab="Density",xlab="Fitness deviation from control",cex.lab=1.5,cex.axis=1.3,freq=F,xl=c(-50,70))
+
+madsmns <- with(fitmads,aggregate(cbind(fitdev),by=list(SALK_Line=SALK_Line),mean))[,2]
+points(y=rep(-0.0007,length(madsmns)),x=madsmns,pch=16,cex=0.8,col="black")
+
+y <- 0.03
+
+if (.Device %in% c("pdf","png","CairoPNG"))
+  {
+    legend(x=19,y=y*1.4,
+         c("Resampled controls","Means of 116 Salk lines"),
+       fill=hcl(h = seq(30, by=360 / 2, length = 2),
+         l = 65, alpha = 0.5),cex=1.0,bty="n")
+  } else
+  {
+  legend(x=19,y=y*1.4,
+         c("Resampled controls","Means of 116 Salk lines"),
+         density=c(20,25),
+         angle=c(45,15),
+         cex=1.1,bty="n")
+  }
+
+ninefive = TRUE
+
+if (ninefive)
+  {
+    ninety.five.bounds <- quantile(cntrlmeans,c(0.025,0.975))
+    
+    arrows(x0=ninety.five.bounds[2],y0=y*0.72,x1=ninety.five.bounds[2]*1.9,y1=y*0.72,lwd=1.8)
+    text(x=ninety.five.bounds[2]*2.2,y=y*0.9,
+         paste(round(100*sum(fitline[,2]>ninety.five.bounds[2])/dim(fitline)[1]),
+               " of lines greater\nthan control",sep="%"))
+    arrows(x0=ninety.five.bounds[1],y0=y*0.72,x1=ninety.five.bounds[1]*1.9,y1=y*0.72,lwd=1.8)
+    text(x=ninety.five.bounds[1]*2,y=y*0.9,
+         paste(round(100*sum(fitline[,2]<ninety.five.bounds[1])/dim(fitline)[1]),
+               " of lines\nless than control",sep="%"))
+    abline(v=ninety.five.bounds[1],lwd=1.5,col="gray")
+        abline(v=ninety.five.bounds[2],lwd=1.5,col="gray")
+  } else {
+    
+    arrows(x0=max(cntrlmeans)*1.15,y0=y*0.7,x1=max(c(cntrlmeans,fitline[,2])),y1=y*0.7,lwd=1.8)
+    text(x=max(cntrlmeans)*1.87,y=y*0.9,
+         paste(round(100*sum(fitline[,2]>max(cntrlmeans))/dim(fitline)[1]),
+               " of lines greater than\nmaximum control sample",sep="%"))
+    arrows(x0=min(cntrlmeans)*1.1,y0=y*0.7,x1=min(c(cntrlmeans,fitline[,2])),y1=y*0.7,lwd=1.8)
+    text(x=min(cntrlmeans)*1.5,y=y*0.95,
+         paste(round(100*sum(fitline[,2]<min(cntrlmeans))/dim(fitline)[1]),
+               " of lines\nless than minimum\ncontrol sample",sep="%"))
+    
+  }
+
+@ 
+
+Here are the number of line means less than control
+
+<<>>=
+
+@ 
+
+<<fitmads,echo=F,dev=c('pdf','postscript','CairoPNG')>>=
+boxplot(fitdev~GeneFamilyName,data=fitmads,ylab="Fitness deviation from control",xlab="Gene family knockouts")
+print(summary(aov(fitdev~GeneFamilyName,fitmads)))
+print(t.test(fitdev~GeneFamilyName,fitmads))
+@ 
+
+Here is the distribution of fitness effects among mads box genes
+
+<<fitmads2,echo=F,dev=c('pdf','postscript','CairoPNG')>>=
+bwplot(fitdev~SALK_Line,data=fitmads,horizontal=T,ylab="Fitness deviation from control",xlab="MADS lines")
+print(summary(aov(fitdev~SALK_Line,fitmads)))
+mnmads <- with(fitmads,aggregate(cbind(fitness,fitdev),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+mnmads <- merge(mnmads,unique(fitmads[,c("SALK_Line","Gene","Gene_Name")]))
+#write.table(file="MADS-function.csv",sep=",",row.names=F,mnmads)
+dotplot(SALK_Line~fitdev,mnmads)
+@ 
+
+
+
+<<compare-to-control-back2back,echo=F,fig.keep='none',dev=c('pdf','postscript','CairoPNG'),comment=NA>>=
+b2b <- histbackback(list(cntrlmeans,fitline[,2]),axes=F)
+abline(v=0,lwd=2)
+
+barplot(-b2b$left, col=hcl(h = 30,l = 65, alpha = 0.5) , horiz=TRUE, space=0, add=TRUE, axes=FALSE)
+barplot(b2b$right, col=hcl(h = 210,l = 65, alpha = 0.5), horiz=TRUE, space=0, add=TRUE, axes=FALSE)
+
+
+axis(2,at=0:11,b2b$breaks,cex.axis=1.4)
+axis(1,at=c(-40,-20,0,20),labels=c(40,20,0,20),cex.axis=1.4)
+mtext("Resampled ancestors",side=3,line=1,at=-26,cex=1.4)
+mtext("Salk lines",side=3,line=1,at=16,cex=1.4)
+mtext("Frequency",side=1,line=3,at=-9,cex=1.7)
+
+mtext("Deviation from ancestor fitness",side=2,line=3,cex=1.5)
+
+lowhi <- which(b2b$breaks%in%b2b$breaks[c(range(which(b2b$left>0))[1],range(which(b2b$left>0))[2]+1)])
+
+arrows(y0=lowhi[1]-1,x0=15,y1=which(b2b$breaks==min(b2b$breaks))-1.3,x1=15)
+text(x=26,y=0.47,
+     paste(round(100*sum(fitline[,2]<min(cntrlmeans))/dim(fitline)[1]),
+           " of lines\nless than minimum\ncontrol sample",sep="%"),cex=0.8)
+
+arrows(y0=lowhi[2]-1,x0=15,y1=which(b2b$breaks==max(b2b$breaks))-1,x1=15)
+text(x=26,y=9,
+     paste(round(100*sum(fitline[,2]>max(cntrlmeans))/dim(fitline)[1]),
+           " of lines\ngreater than\nmaximum\ncontrol sample",sep="%"),cex=0.8)
+@ 
+
+\subsection{Fitness components}
+<<splom-fitness-traits,echo=F,fig.keep='none',fig.width=10,fig.height=10,dev=c("pdf","CairoPNG"),comment=NA>>=
+#plot(fitline.alldata[,c("fitness","flowers","fruitnum","mass","percent","silique","abortn")])
+fitline.means <- with (fitline.alldata,aggregate(cbind(fitness,flowers,fruitnum,mass,abortn,percent,silique,alive.at.harvest),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+indic=1+(fitline.means$SALK_Line=="SALK_CS60000")
+plot(fitline.means[,-1],pch=c(1,15)[indic],col=indic,cex=c(1,1.4)[indic])
+#library(ggplot2)
+#plotmatrix(fitline.means[,-1])
+@ 
+
+<<fig-s3-fitness-components,echo=F,fig.keep='high',fig.width=7,fig.height=4,dev=c("pdf","CairoPNG","postscript"),comment=NA>>=
+#plot(fitline.alldata[,c("fitness","flowers","fruitnum","mass","percent","silique","abortn")])
+fitline.means <- with (fitline.alldata,aggregate(cbind(fitness,flowers,fruitnum,mass,abortn,percent,silique,alive.at.harvest),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+indic=1+(fitline.means$SALK_Line=="SALK_CS60000")
+#plot(fitline.means[,-1],pch=c(1,15)[indic],col=indic,cex=c(1,1.4)[indic])
+#library(ggplot2)
+#plotmatrix(fitline.means[,-1])
+
+par(mfrow=c(1,3))
+par(mar=c(6,4.5,4,0)+0.1)
+plot(fitness~fruitnum,xlab="Silique Number",ylab="Fitness",data=fitline.means,cex.lab=1.8,cex.axis=1.2,
+     pch=c(1,16)[indic],col=indic,cex=c(1.4,1.8)[indic])
+par(mar=c(6,1.75,4,1.25)+0.1)
+plot(fitness~percent,xlab="",ylab="",data=fitline.means,axes=F,cex.lab=1.5,cex.axis=1.2,
+     pch=c(1,16)[indic],col=indic,cex=c(1.4,1.8)[indic])
+axis(1,cex.axis=1.2)
+axis(2,labels=NA)
+box()
+mtext(side=1,at=50,line=4.5,"Germination\nPercentage",cex=1.3)
+par(mar=c(6.1,0,4.1,4))
+plot(fitness~alive.at.harvest,xlab="",ylab="",data=fitline.means,axes=F,cex.lab=1.5,
+     pch=c(1,16)[indic],col=indic,cex=c(1.4,1.8)[indic])
+axis(4,cex.axis=1.2)
+axis(1,cex.axis=1.2)
+axis(2,labels=NA)
+box()
+mtext(side=1,at=0.62,line=4.5,"Survive to\nFruiting",cex=1.3)
+@ 
+
+\section{Analysis of fitness}
+
+Taking all SALK lines and pooling them and comparing to the control:
+
+You can see from the resampled line distributions that salk lines and
+controls have similar mean fitnesses, with definite differences in
+variance among groups
+
+<<echo=F>>=
+t.test(fitness~treat,fitmerg)
+kruskal.test(fitmerg$treat,fitmerg$fitness)
+
+tobs <- t.test(fitness~treat,data=fitmerg)$statistic
+tperm <- NULL
+for (i in 1:1000)
+  {
+    tperm <- c(tperm,
+               t.test(fitness~sample(treat,length(treat),replace=F),data=fitmerg)$statistic
+               )
+  }
+
+print("permutation typeI prob:")
+print(sum(tperm>tobs)/length(tperm))
+
+@ 
+
+
+\section{Effects of tdna insert number}
+
+Here is a plot that relates our total measure of fitness in the lines
+used in the original pilot study to the ratio of tdna to endogenous genes
+
+<<fig-s1-tdna-dist,echo=F,fig.keep='high',dev=c("CairoPNG","postscript","pdf"),comment=NA>>=
+hist(log(fruit.by.line$area.ratio),xlab="ln(ratio of TDNA/petC)",
+     main="",cex.axis=1.2,cex.lab=1.4,lwd=2,ylim=c(-2,25))
+arrows(y0=-2,y1=0,x0=log(1.5),x1=log(1.5),lwd=2)
+@ 
+
+<<fig-s2-TDNA-ratio-plot,echo=F,fig.keep='high',dev=c("CairoPNG","postscript","pdf"),comment=NA>>=
+plot(fitdev~log(area.ratio),fruit.by.line,cex.axis=1.2,cex.lab=1.4,lwd=2,
+     xlab="Natural log of ratio tdna/PetC",
+     ylab="Average deviation from the fitness of the ancestor")
+summary(lm(fitdev~log(area.ratio),fruit.by.line))
+@ 
+
+Clearly no pattern there and a regression confirms.
+
+Just to make sure, I also lumped the ratios into categories and looked
+for a pattern again:
+
+<<echo=F,fig.keep='none',comment=NA>>=
+boxplot(fitdev~ratiocat,fruit.by.line,xlab="Ratio Category",ylab="Deviation of line from fitness of Ancestor")
+@ 
+
+When focusing on medians, it looks a little bit like there might be
+some variation across categories 
+
+<<comment=NA>>=
+summary(aov(fitdev~as.factor(ratiocat),fruit.by.line))
+@ 
+
+Alas, no pattern there either.  I might suggest that, at the least, we
+worry about copy number less than other factors when choosing lines
+for UnPAK projects
+
+
+\section{Fitness as a function of gene family size}
+
+In the original pilot study we chose genes from different families
+with differing sizes.  Again, there does not seem to be a significant
+relationship between gene family size and reproductive output in the
+non-regulatory genes, but there does seem to be a slight pattern in
+the regulatory genes. 
+
+This figure is based on the number of genes in the Gene Family data on tair
+
+<<echo=F,fig.keep='none',comment=NA>>=
+print(xyplot(fitdev~FamilySize,
+             groups=Regulatory,
+             data=fitmerg,
+             cex=1.5,type=c("p","r"),
+             auto.key=T,
+             main="Fitness vs Fam Size for Regulatory and Non-regulatory genes",
+             ylab="Fitness relative to ancestor",
+             xlab="Gene Family Size"))
+@ 
+
+This is the same figure but with the means of each line plotted
+instead of all the reps for each line.
+
+<<echo=F,fig.keep='none',comment=NA>>=
+print(xyplot(fitdev~FamilySize,
+             groups=Regulatory,
+             data=fruit.by.line,
+             cex=1.5,type=c("p","r"),
+             auto.key=T,
+             main="Fitness vs Fam Size for Regulatory and Non-regulatory genes",
+             ylab="Fitness relative to ancestor",
+             xlab="Gene Family Size"))
+summary(lm(fitdev~FamilySize*Regulatory,data=fruit.by.line))
+summary(lm(fitdev~FamilySize,subset=Regulatory=="yes",fruit.by.line))
+
+@ 
+
+<<fig2-gene-fam-vs-fitdev,echo=F,fig.keep='high',dev=c("pdf","postscript","CairoPNG"),fig.width=3.5,fig.height=3.5,comment=NA>>=
+par(mar=c(5,5,1,1)+0.1)
+plot(1,1,type="n",xlab="Gene Family Size",ylab="Fitness deviation\nfrom ancestor",ylim=c(-80,80),xlim=c(0,400),cex.axis=1.0,cex.lab=1.0)
+points(fitdev~FamilySize,data=fruit.by.line,pch=c(1,16)[1+(fruit.by.line$Regulatory=="yes")],cex=1.0)
+abline(h=0,lty=2,lwd=2,col="gray")
+points(x=c(-10,120),y=c(-15.3-10*0.1937,-15.3 + 120*0.1937),type="l",lwd=3)
+@ 
+
+
+
+And some analyses on the means of each line's fitness deviation from
+the ancestor:  First OLS ancova. Then regressions for
+non-regulatory and then regulatory genes
+
+<<comment=NA>>=
+summary(aov(fitdev~FamilySize*Regulatory,fruit.by.line))
+summary(lm(fitdev~FamilySize,subset=Regulatory=="no",fruit.by.line))
+summary(lm(fitdev~FamilySize,subset=Regulatory=="yes",fruit.by.line))
+summary(lm(log(fitdev+40)~FamilySize,subset=Regulatory=="yes",fruit.by.line))
+@ 
+
+Here is a little more sophisticated analysis of the family size effect
+
+<<>>=
+library(nlme)
+fm1 <- lme(fixed=fitdev~FamilySize,random=~1|SALK_Line,method="ML",subset=Regulatory=="yes",na.action=na.exclude,data=fitmerg)
+#plot(fm1)
+vfix <- varFixed(~FamilySize)
+fm2 <- lme(fixed=fitdev~FamilySize,random=~1|SALK_Line,method="ML",subset=Regulatory=="yes",weights=vfix,na.action=na.exclude,data=fitmerg)
+#plot(resid(fm2,type="pearson")~fitted(fm2))
+fm3 <- lme(fixed=fitdev~1,random=~1|SALK_Line,method="ML",subset=Regulatory=="yes",na.action=na.exclude,data=fitmerg)
+
+anova(fm3,fm1,fm2) #looks like fm1 is the best model
+anova(fm1)
+anova(fm2)
+anova(fm3)
+
+@ 
+
+Ok, here is the analysis of family size with line as random
+intercept.  Terrible heteroscedacity, repaired using a fixed variance
+structure.  No signal of family size in the final model.
+
+Now, the joint categories approach: Two tests.  The first assumes that
+the rows and columns are independent, but the expected values come
+from the marginal totals.  The second assumes that the number of
+fitneses in each of the four categories is equal.
+
+<<echo=F,comment=NA>>=
+fitness.positive <- fitmerg$fitdev >= 0
+family.large <- fitmerg$FamilySize >= median(fitmerg$FamilySize,na.rm=T)
+tbl <- table(fitness.positive,family.large)
+#plot(tbl)
+chisq.test(tbl)
+equal.exp <- as.table(matrix(rep(0.25*sum(tbl),4),2,2))
+chisq <- sum(((tbl-equal.exp)^2)/equal.exp)
+1-pchisq(chisq,df=1)
+@ 
+
+Here is a test of the change in variance through time:
+<<fig.keep='none'>>=
+brks=c(0,seq(10,150,10),166)
+family.size.cat <- cut(fitmerg$FamilySize,breaks=brks)
+sds <- with(fitmerg,tapply(fitdev,family.size.cat,sd))
+brkmid <- (brks+(c(brks[-1],166)-brks)/2)[-length(sds)]
+bartlett.test(fitmerg$fitdev,family.size.cat)
+plot(sds~brkmid)
+summary(lm(sds~brkmid))
+
+
+@ 
+
+So not much change in variance, though not a lot of power either.
+
+<<regulatory-box,fig.keep='none',echo=F,dev=c("pdf","CairoPNG"),comment=NA>>=
+boxplot(fitdev~Regulatory,notch=T,data=fitmerg)
+t.test(fitdev~Regulatory,data=fitmerg)
+@ 
+
+
+\section{Multiple environment experiment}
+
+<<echo=F,results='markup',warning=F,comment=NA>>=
+
+#
+#
+# read in the experiment 2 germination data and produces a
+# per-line estimate of germination
+# This first germination part is not really being used at the 
+# moment.  
+#
+if (FALSE)
+  {
+#READ IN DATA
+    rand <- read.csv(paste(csvdir,"random-transplant.csv",sep='/'),header=T)
+    germ2 <- read.csv(paste(csvdir,"germ-data.csv",sep='/'),header=T)
+    names(germ2)<- c("Tray","Column","Row","germ","recheck","comments")
+    rand <- rand[,c(-8,-2,-6)]
+    names(rand)[4] <- "tagnum"
+    germ2 <- merge(germ2,rand)
+    germ2$germ[germ2$germ=="m"] <- NA
+    germ2$germ <- ifelse(germ2$germ=="y",TRUE,FALSE)
+
+    fitdev <- read.csv(paste(csvdir,"fitlines.csv",sep='/'),header=T)
+
+#
+#CALCULATE GERM RATES
+#
+    germrate1 <- with(germ2,aggregate(germ,by=list(tagnum=tagnum),mean,na.rm=T))
+    germrate2 <- with(germ2,aggregate(germ,by=list(tagnum=tagnum),sd,na.rm=T))
+    germrate3 <- with(germ2,aggregate(germ,by=list(tagnum=tagnum),function(x){sum(!is.na(x))}))
+    names(germrate1)[2] <- "mn"
+    names(germrate2)[2] <- "sd"
+    names(germrate3)[2] <- "n"
+    germrates <- merge(germrate3,merge(germrate1,germrate2))
+                                        #germrates <- merge(germrates,germ2,all.x=T,all.y=F)
+    germrates$se <- germrates$sd/sqrt(germrates$n)
+
+#names(germrates)[9] <- "germinate"
+    names(germrates)[2:5] <- c("germ.n","germ.mn","germ.sd","germ.se")
+    germrates$tagnum <- as.numeric(as.character(germrates$tagnum))
+    germrates <- germrates[!is.na(germrates$tagnum),]
+    fitdev2 <- merge(germrates,fitdev,by="tagnum")
+
+
+#dotplot(Line~mn,data=germrates)
+    write.table(file=paste(csvdir,"germrates.csv",sep='/'),col.names=T,row.names=F,sep=',',germrates)
+  }
+##################################################################################################
+##################################################################################################
+#### This is where results from analysis will be used subsequently                             
+###  read in and clean up data
+###  essentially the same as setup.R in the ../experiment2 directory
+##################################################################################################
+rawresult <- read.csv(paste(csvdir,"Spring08MultiEnvironment-edit.csv",sep='/'),header=T)
+rawresult <- rawresult[,c(1:16)]
+names(rawresult) <- c("pot","treattype.badT","line","Pot2","treattype","tray","biomass","fruitnum","abortnum","silique","tray1","treat1","pot3","height","leaf","rosediam")
+rawresult$height <- as.numeric(as.character(rawresult$height))
+rawresult$leaf <- as.numeric(as.character(rawresult$leaf))
+rawresult$rosediam <- as.numeric(as.character(rawresult$rosediam))
+results2 <- rawresult
+results2$line <- as.character(results2$line)
+results2$line <- ifelse(nchar(results2$line)<6,paste("0",results2$line,sep=''),results2$line)
+results2$SALK_Line <- paste("SALK_",results2$line,"c",sep='')
+results2$SALK_Line[results2$line=="cs60000"] <- results2$line[results2$line=="cs60000"]
+results2$SALK_Line[grep("ECOTY",results2$line)] <- results2$line[grep("ECOTY",results2$line)]
+results2$biomass[results2$biomass=="."] <- NA
+results2$biomass <- as.numeric(as.character(results2$biomass))
+results2$germ <- 1
+results2$germ[results2$fruitnum=="ng"] <- 0
+results2$surv <- 1
+results2$surv[results2$fruitnum=="ns"] <- 0
+
+results2$fruitnum[!results2$surv] <- 0
+results2$fruitnum[!results2$germ] <- 0
+
+results2$fruitnum <- as.numeric(as.character(results2$fruitnum))
+results2$fitness <- results2$surv*results2$germ*results2$fruitnum
+results2$fitnogerm <- results2$fitness
+results2$fitnogerm[!results2$germ] <- NA
+##################estimate fitnesses
+write.table(file=paste(csvdir,"linemeans.csv",sep="/"),sep=",",with(results2,aggregate(cbind(fitness,fitnogerm),by=list(treattype=treattype,line=line),mean,na.rm=T)))
+
+cntrlmeans <- with(results2[results2$SALK_Line=="cs60000",],
+                   aggregate(cbind(fitness,fitnogerm),by=list(treattype=treattype),mean,na.rm=T))
+names(cntrlmeans)[2:3] <- c("fitmean","fitnogermmn")
+results2 <- merge(cntrlmeans,results2)
+results2$fitdev <- results2$fitness-results2$fitmean
+results2$fitdevng <- results2$fitnogerm-results2$fitnogermmn
+results2$fitdev.all <- results2$fitness-mean(results2$fitness[results2$SALK_Line=="CS60000"],na.rm=T)
+results2$fitdevng.all <- results2$fitnogerm-mean(results2$fitnogerm[results2$SALK_Line=="CS60000"],na.rm=T)
+percent <- with(results2,aggregate(germ,by=list(SALK_Line=SALK_Line,treattype=treattype),mean,na.rm=T))
+names(percent)[3] <- "percent"
+percent$percent <- percent$percent*100
+
+results2 <- merge(results2,percent)
+
+results1 <- fitmerg  #just copying the fitness merged file to results so I can use "old code"
+results1$treattype <- "FIRST.EXP"
+results1$SALK_Line <- as.character(toupper(results1$SALK_Line))
+results2$SALK_Line <- as.character(toupper(results2$SALK_Line))
+results1$SALK_Line[results1$SALK_Line=="SALK_CS60000"] <- "CS60000"
+results1$fitdevng <- with(results1,(fruitnum+fruits.removed)-mean((fruitnum+fruits.removed)[SALK_Line=="CS60000"],na.rm=T))
+results1$fitdev <- with(results1,(fitness)-mean((fitness)[SALK_Line=="CS60000"],na.rm=T))
+results <- merge(results2,
+                 results1[,c("SALK_Line","Gene","fitdev","tagnum","abortn",
+                             "alive.at.harvest","treat","germ","fitness","area.ratio","FamilySize",
+                             "GeneFamilyName","SFamilySize","ratiocat","Regulatory")],all=T)
+
+results$surv[is.na(results$surv)] <- results$alive.at.harvest[is.na(results$surv)] 
+results$treattype <- as.character(results$treattype)
+results$treattype[is.na(results$treattype)] <- "FIRST.EXP"
+write.table(file=paste(csvdir,"combined-results.csv",sep="/"),row.names=F,sep=",",results)
+
+
+
+fitmeans <- with(results,aggregate(cbind(fitness,fitdev,fitnogerm,fitdevng),by=list(SALK_Line=SALK_Line,treattype=treattype),mean,na.rm=T))
+write.table(file=paste(csvdir,"fitmeans.csv",sep="/"),row.names=F,sep=",",fitmeans)
+write.table(file=paste(csvdir,"genes-surveyed.csv",sep="/"),row.names=F,sep=",",merge(unique(results[,c("SALK_Line","Gene","GeneFamilyName")]),fitmeans[,c("SALK_Line","treattype","fitdev")]))
+
+
+linesacrossexp2 <- with(results[results$treattype!="FIRST.EXP",],aggregate(cbind(fitness,fitdev),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+lineacrosstrt <- with(results[results$treattype!="FIRST.EXP",],aggregate(cbind(fitnogerm,fitdevng),by=list(SALK_Line=SALK_Line,treattype=treattype),mean,na.rm=T))
+
+
+linesonly <- with(results,aggregate(cbind(fitnogerm,fitdevng,fitness,fitdev,percent,surv,fruitnum),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+
+
+
+write.table(file=paste(csvdir,"meansacrosstreat.csv",sep="/"),linesacrossexp2,row.names=F,sep=",")
+#
+#
+# make a comparison between experiment one and two
+#
+#
+
+results$fitnogerm[results$treattype=="FIRST.EXP"] <- results$fruitnum[results$treattype=="FIRST.EXP"]
+results$fitdevng[results$treattype=="FIRST.EXP"] <- results$fitdev[results$treattype=="FIRST.EXP"]
+mnres <- with(results,aggregate(cbind(fitness,fitdev,fitnogerm,fitdevng),by=list(SALK_Line=SALK_Line,treattype=treattype),mean,na.rm=T))
+mnres <- merge(mnres[mnres$treattype!="FIRST.EXP",],mnres[mnres$treattype=="FIRST.EXP",],by="SALK_Line")
+
+names(mnres) <- c("SALK_Line",   "treattype2", "fitness2",   "fitdev2",    "fitnogerm2",
+                  "fitdevng2",  "treattype", "fitness",   "fitdev",    "fitnogerm",
+                  "fitdevng")
+
+#
+# make a dataset of line means across treatments
+#
+lineacrosstrt <- with(results,aggregate(cbind(fitness,fitdev,fitnogerm,fitdevng,percent,surv,fitdev.all,fruitnum,fitdevng.all),by=list(SALK_Line=SALK_Line,treattype=treattype),mean,na.rm=T))
+mean.all.lines <- lineacrosstrt
+lineacrosstrt <- lineacrosstrt[lineacrosstrt$SALK_Line %in% lineacrosstrt$SALK_Line[lineacrosstrt$treattype!="FIRST.EXP"],]
+
+eco.or.not <- rep(FALSE,dim(mean.all.lines)[1])
+eco.or.not[grep("ECO",mean.all.lines$SALK_Line)] <-TRUE 
+ecorange <- with(mean.all.lines[eco.or.not,],aggregate(cbind(fitness,fitdev,fitnogerm,fitdevng),by=list(treattype=treattype),quantile,probs=c(0.025,0.975),na.rm=T))
+
+lineacrosstrt$treattype <- with(lineacrosstrt,reorder(treattype,fitnogerm,median,na.rm=T))
+lineacrosstrt <- lineacrosstrt[c(grep("SALK",lineacrosstrt$SALK_Line),
+                                 grep("CS60000",lineacrosstrt$SALK_Line)),]
+lineacrosstrt <- lineacrosstrt[order(lineacrosstrt$treattype),]
+lineacrosstrt$SALK_Line <- as.character(lineacrosstrt$SALK_Line)
+
+
+results$SALK_Line <- as.character(results$SALK_Line)
+intresults <- results[results$SALK_Line%in%results$SALK_Line[results$treattype!="FIRST.EXP"],]
+intresults.ecotypes <- intresults[grep("ECOT",intresults$SALK_Line),]
+intresults <- intresults[-grep("ECOT",intresults$SALK_Line),]
+
+
+@ 
+
+\subsection{Figures for the 1st multi-environment experiment}
+
+This figure is fitness deviation ignoring germination (we don't have
+per-sowed seed estimates (in other words, replicated) of germination
+for the first experiment, just average germination for that line for
+that germination effort.  We do have those data for the second three
+treatments/time points
+
+<<reaction-norm1,fig.keep='none',echo=F,out.width='"0.7\\linewidth"',dev=c("pdf","CairoPNG"),comment=NA>>=
+lineacross.ratio <- merge(lineacrosstrt,unique(intresults[!is.na(intresults$ratiocat),c("SALK_Line","ratiocat")]))
+lineacross.ratio.eco <- merge(lineacrosstrt,unique(intresults.ecotypes[!is.na(intresults.ecotypes$ratiocat),c("SALK_Line","ratiocat")]))
+lineacross.ratio <- with(lineacross.ratio,lineacross.ratio[order(treattype,SALK_Line),])
+#xyplot(fitdevng~treattype,groups=SALK_Line,data=lineacrosstrt,auto.key=T,type="b")
+lineacrosstrt$treattype <- relevel(
+                             relevel(
+                               relevel(lineacrosstrt$treattype,
+                                       "nutrient"),
+                               "control"),
+                             "FIRST.EXP")
+lineacrosstrt <- lineacrosstrt[order(unclass(lineacrosstrt$treattype)),]
+plot(1~1,type="n",data=lineacrosstrt,ylim=c(-100,150),xlim=c(0.8,4.2),
+     xlab="Treatment", ylab="Deviation from ancestor fitness",
+     cex.lab=1.5,axes=F)
+box()
+axis(2,cex=1.4)
+axis(1,at=1:4,c("Initial screen","Control","High Nutrient","High Water"),cex=1.4)
+
+lns <- unique(lineacrosstrt$SALK_Line)
+pch <- 1:length(lns)
+cols <- rep(1,length(lns))
+ltys <- (lineacrosstrt$fitdevng[lineacrosstrt$treattype=="FIRST.EXP"]<0)+1
+
+rngs <- t(sapply(lns,function(x){range(lineacrosstrt$fitdevng[lineacrosstrt$SALK_Line==x])}))
+lwds <- (apply(rngs,1,prod)>0)*2+1
+lwds[which(lns=="CS60000")] <- 2
+
+ltys[which(lns=="CS60000")] <- 1
+abline(h=0)
+for (i in 1:length(lns))
+  {
+    print(lns[i])
+    points(fitdevng~unclass(treattype),subset=SALK_Line==lns[i],data=lineacrosstrt,
+           pch=pch[i],col=cols[i],lty=ltys[i],lwd=lwds[i],
+           type="b")
+  }
+
+@ 
+
+
+I'm going to try and address courtney's question about the gene family size of high and low lines
+
+<<hilotest,fig.display='high',dev=c("pdf","CairoPNG"),echo=FALSE>>=
+hilo.fam <- merge(unique(lineacrosstrt[lineacrosstrt$treattype=="FIRST.EXP",c("SALK_Line","fitdev")]),
+                  unique(confirmed.with.fam[,c("SALK_Line","gene.family.size")]))
+
+hilo.fam$lohi <- ifelse(hilo.fam$fitdev>0,"hi","low")
+print(names(hilo.fam))
+
+
+dotplot(lohi~gene.family.size,data=hilo.fam,main="Compare family sizes for the high and low lines chosen for exp2 ")
+@ 
+
+Now here is the figure with straight mean fruit number per line:
+
+<<fig3-reaction-norm1-fit,fig.display='high',fig.width=10,fig.height=10,echo=F,dev=c("pdf","postscript","CairoPNG"),comment=NA>>=
+
+par(mar=c(5,5,4,2)+0.1)
+plot(1~1,type="n",data=lineacrosstrt,ylim=range(lineacrosstrt$fitness),xlim=c(0.8,3.2),
+     xlab="Treatment", ylab="Fitness",
+     cex.lab=1.5,axes=F)
+box()
+axis(2,cex.axis=1.4)
+axis(1,at=1:3,c("Control","High Nutrient","High Water"),cex.axis=1.4)
+
+
+ecorange$treatX = c(1,3,2) #make X coordinates for the reaction norm for the 
+                           #watermark background.  There is no data for FirstExp
+ecorange = ecorange[order(ecorange$treatX),]
+polyX  = with(ecorange,c(treatX[1],treatX[2],treatX[3],treatX[3],treatX[2],treatX[1]))
+polyY  = c(ecorange[1:3,2][,1],ecorange[3:1,2][,2])
+polygon(x=polyX,y=polyY,density=NA,col="lightgray",border=NA)
+
+lns <- unique(lineacrosstrt$SALK_Line)
+pchs <- 1:length(lns)
+cols <- rep(1,length(lns))
+cols[lns=="CS60000"]=2
+ltys <- (lineacrosstrt$fitdevng[lineacrosstrt$treattype=="FIRST.EXP"]<0)+1
+
+rngs <- t(sapply(lns,function(x){range(lineacrosstrt$fitdevng[lineacrosstrt$SALK_Line==x])}))
+lwds <- (apply(rngs,1,prod)>0)*2+1
+lwds[which(lns=="CS60000")] <- 2
+ltys[which(lns=="CS60000")] <- 1
+
+for (i in 1:length(lns))
+  {
+    print(lns[i])
+    print(cols[i])
+    points(fitness~I(unclass(treattype)-1),subset=((SALK_Line==lns[i])&(treattype!="FIRST.EXP")),data=lineacrosstrt,
+           pch=pchs[i],col=cols[i],lty=ltys[i],lwd=lwds[i],
+           type="b")
+  }
+
+lns.all <- lns
+lns.n <- lns[which((ltys==1)&(lwds==1))]
+lty <- ltys[which((ltys==1)&(lwds==1))]
+lwd <- lwds[which((ltys==1)&(lwds==1))]
+col <- cols[which((ltys==1)&(lwds==1))]
+pch <- pchs[which((ltys==1)&(lwds==1))]
+legend(x=2.64,y=213,legend=lns.n,cex=0.75,
+       lty=lty,
+       lwd=lwd,
+       col=col,
+       pch=pch,
+       bty="n"
+       )
+lns.n <- lns[which((ltys==1)&(lwds==3))]
+lty <- ltys[which((ltys==1)&(lwds==3))]
+lwd <- lwds[which((ltys==1)&(lwds==3))]
+col <- cols[which((ltys==1)&(lwds==3))]
+pch <- pchs[which((ltys==1)&(lwds==3))]
+legend(x=2.64,y=183,legend=lns.n,cex=0.75,
+       lty=lty,
+       lwd=lwd,
+       col=col,
+       pch=pch,
+       bty="n"
+       )
+lns.n <- lns[which((ltys==2)&(lwds==1))]
+lty <- ltys[which((ltys==2)&(lwds==1))]
+lwd <- lwds[which((ltys==2)&(lwds==1))]
+col <- cols[which((ltys==2)&(lwds==1))]
+pch <- pchs[which((ltys==2)&(lwds==1))]
+legend(x=2.64,y=171,legend=lns.n,cex=0.75,
+       lty=lty,
+       lwd=lwd,
+       col=col,
+       pch=pch,
+       bty="n"
+       )
+lns.n <- lns[which((ltys==2)&(lwds==3))]
+lty <- ltys[which((ltys==2)&(lwds==3))]
+lwd <- lwds[which((ltys==2)&(lwds==3))]
+col <- cols[which((ltys==2)&(lwds==3))]
+pch <- pchs[which((ltys==2)&(lwds==3))]
+legend(x=2.64,y=141,legend=lns.n,cex=0.75,
+       lty=lty,
+       lwd=lwd,
+       col=col,
+       pch=pch,
+       bty="n"
+       )
+
+legend(x=2.64,y=119,legend="CS60000     ",cex=0.75,
+       lty=1,
+       lwd=3,
+       col=2,
+       pch=pchs[length(pchs)], #last one is cs60000
+       bty="n"
+       )
+rect(xleft=2.63,xright=3.27,ytop=212,ybottom=105)
+@ 
+
+
+
+
+
+
+
+\subsubsection{Copy number}
+In the following figure line width is proportional to copy number category
+
+<<fig.keep='none',echo=F,out.width='"0.7\\asistwidth"',comment=NA>>=
+xyplot(fitdev~treattype,groups=SALK_Line,
+       lwd=1*unclass(as.factor(lineacross.ratio$ratiocat))^1.1,
+       data=lineacross.ratio,
+       auto.key=T,type="b")
+@ 
+
+
+\subsection{Various tests of GxE}
+
+
+
+<<warning=F,comment=NA>>=
+#MixedEffects 
+fit1 <- lmer(fitdevng~1+(1|SALK_Line),subset=SALK_Line!="CS60000",data=intresults)
+fit2 <- lmer(fitdevng~treattype+(1|SALK_Line),subset=SALK_Line!="CS60000",data=intresults)
+fit3 <- lmer(fitdevng~treattype+treattype:SALK_Line+(1|SALK_Line),subset=SALK_Line!="CS60000",data=intresults)
+
+anova(fit1,fit2,fit3)
+
+#fit using OLS
+fitaov1 <- aov(fitdevng~treattype*SALK_Line,subset=SALK_Line!="CS60000",data=intresults)
+summary(fitaov1)
+
+#fit using ML
+fitaov1.glm <-glm(fitdevng~treattype*SALK_Line,subset=SALK_Line!="CS60000",data=intresults) #GxE very significant
+anova(fitaov1.glm,test="Chisq")
+
+#
+#now look in each environment and ask if there are line differences
+#
+for (trt in unique(intresults$treattype))
+  {
+    fit.line <- glm(fitdevng~1+as.factor(SALK_Line),subset=SALK_Line!="CS60000",data=intresults[intresults$treattype==trt,])
+    fit.intercept <- glm(fitdevng~1,subset=SALK_Line!="CS60000",data=intresults[intresults$treattype==trt,])
+    cat(rep("-",30));cat("\n")
+    print (paste("Effect of including line in environment: ",trt))
+    print(anova(fit.intercept,fit.line,test="Chisq"))
+    cat(rep("-",30));cat("\n")
+  }
+
+@ 
+
+Here is an analysis with Prior information and ecotypes included
+
+<<prior,echo=T,comment=NA>>=
+results$genotype.cls = rep("control",dim(results)[1])
+results$genotype.cls[results$fitdev<0] = "low"
+results$genotype.cls[results$fitdev>0] = "high"
+results$genotype.cls[results$SALK_Line=="CS60000"] = "control"
+results$genotype.cls[grep("ECO",results$SALK_Line)] = "ecotype"
+
+fit1 <- lm(fitness~treattype*genotype.cls,subset=treattype!="FIRST.EXP",data=results)
+Anova(fit1,contrasts = list(treattype=contr.sum,genotype.cls=contr.sum),type=3)
+
+fit2 <- lm(fitness~treattype*genotype.cls,subset=(treattype!="FIRST.EXP")&(genotype.cls!="ecotype"),data=results)
+Anova(fit2,contrasts = list(treattype=contr.sum,genotype.cls=contr.sum),type=3)
+
+@ 
+
+This analysis just looks for GxE and main effects in the ecotypes.
+Not much signal
+
+<<>>=
+@ 
+Ecotype lines only
+
+<<>>=
+fitaov.genotype.cls.nomut <- aov(fitness~treattype*SALK_Line,subset=(treattype!="FIRST.EXP")&(genotype.cls=="ecotype"),data=results)
+summary(fitaov.genotype.cls.nomut)
+
+@ 
+
+
+<<>>=
+
+
+fitall <- glm(fitdev~treattype*SALK_Line,subset=treattype!="FIRST.EXP",data=intresults)
+(anova(fitall,test="F"))
+
+#add in a classifier for early experiment performance
+firstmns <- with(intresults[intresults$treattype=="FIRST.EXP",c("fitdev","SALK_Line")],
+                 aggregate(cbind(first.fitdev=fitdev),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+intresults <- merge(intresults,firstmns,all.x=T)
+
+fitlo <-  glm(fitdev~treattype*SALK_Line,subset=((treattype!="FIRST.EXP")&(first.fitdev<0)),data=intresults)
+(anova(fitlo,test="F"))
+
+fithi <-  glm(fitdev~treattype*SALK_Line,subset=((treattype!="FIRST.EXP")&(first.fitdev>0)),data=intresults)
+(anova(fithi,test="F"))
+
+intresults$lohi <- factor(ifelse(intresults$first.fitdev<=0,"low","high"))
+fitlowhi <- glm(fitdev~treattype*lohi,subset=(treattype!="FIRST.EXP"),data=intresults)
+(anova(fitlowhi,test="F"))
+
+Anova(lm(fitdev~treattype*lohi,subset=(treattype!="FIRST.EXP"),data=intresults),contrasts = list(treattype=contr.sum,lohi=contr.sum),type=3)
+
+
+fiteco <-  glm(fitdev~treattype*SALK_Line,data=intresults.ecotypes)
+(anova(fiteco,test="F"))
+
+
+@ 
+\subsection{Tables for the MS}
+
+\subsubsection{Gene families}
+<<>>=
+famtable <- unique(fitmerg[!is.na(fitmerg$Regulatory),c("GeneFamilyName","FamilySize","Regulatory")])
+linesfromfams <- with(unique(fitmerg[fitmerg$GeneFamilyName!="Control",c("SALK_Line","GeneFamilyName")]),aggregate(cbind(Number.of.Lines=SALK_Line),by=list(GeneFamilyName=GeneFamilyName),length))
+famtable <- merge(famtable,linesfromfams,all.x=T)
+famtable <- famtable[order(famtable$Regulatory,-famtable$FamilySize),]
+famtable$Function <- ifelse(famtable$Regulatory=="yes","Regulatory","Metabolic")
+famtable <- famtable[,-which(names(famtable)=="Regulatory")]
+
+require(xtable)
+print(file="redundancy-tables-figs/tbl1-genefams.html",xtable(famtable),type="html",
+      include.rownames=F)
+@ 
+\subsubsection{SALK Line list}
+<<>>=
+salktbl <- unique(fitmerg[,c("SALK_Line","Gene","Gene_Family")])
+salktbl <- salktbl[complete.cases(salktbl),]
+salktbl <- salktbl[order(salktbl$Gene_Family,salktbl$SALK_Line),]
+print(file="redundancy-tables-figs/tbls1-salk-lines.html",xtable(salktbl),type="html",
+      include.rownames=F)
+@ 
+
+\subsection{Test for effect of line on fitness for first exp.}
+
+<<>>=
+summary(aov(log(fitness+1)~SALK_Line,data=fitmerg[grep("SALK.[0-9]+C",fitmerg$SALK_Line),]),)
+@ 
+
+\section{Naturally occuring variants}
+We took the data from Cao et al 2010 and determined how many of the lines in this experiment also showed some sort of natural variation in gene function
+<<>>=
+suppressMessages(require(dplyr))
+snp <- unique(read.csv(paste0(csvdir,"/phen-snp.csv"))[,1:2])
+names(snp)[2] <- "snp.strains"
+snp <- snp %>% group_by(Accession) %>% summarise(snp.strains.mn=sum(snp.strains))
+sv <- unique(read.csv(paste0(csvdir,"/phen-sv.csv"))[,1:2])
+names(sv)[2] <- "sv.strains"
+sv <- sv %>% group_by(Accession) %>% summarise(sv.strains.mn=sum(sv.strains))
+write.table(file="cao-digested.csv",sep=",",row.names=F,unique(merge(snp,sv)))
+@ 
+
+There are definitely lines that are knocked out in nature.  The first
+table is the frequency of lines with no natural variants (false)
+versus variants for SNPs that should drastically alter gene function.
+The second is for the distribution of lines with large structural variants
+
+<<>>=
+with(unique(snp),table(snp.strains.mn>0))
+with(unique(sv),table(sv.strains.mn>0))
+@ 
+
+
+The following figure illustrates the distribution of the naturally occurring variants in our collection of lines.
+<<fig-s4,fig.display='high',echo=F,dev=c("pdf","postscript","CairoPNG")>>=
+par(mfrow=c(2,1))
+hist(snp$snp.strains.mn,main="Distribution of natural accessions with large effect SNPs",xlab="Number of natural accessions",xlim=c(0,80))
+hist(sv$sv.strains.mn,main="Distribution of natural accessions with large structural variants",xlab="Number of natural accessions",xlim=c(0,80),breaks=4)
+
+@ 
+% 
+%
+%
+% Local Variables: 
+% TeX-master: "figures-paper1"
+% End:
+
+
