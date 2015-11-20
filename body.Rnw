@@ -1,11 +1,11 @@
-\section{Reworked analyses and figure drafts for paper1 after JEB reviews}
+\section*{Reworked analyses and figure drafts for paper1 after JEB reviews}
 
 <<echo=F,results='markup',comment=NA>>=
-if (!(require(Hmisc)&require(lme4)&require(lattice)&require(compiler)&require(car)))
+suppressMessages({if (!(require(Hmisc)&require(lme4)&require(lattice)&require(compiler)&require(car)))
     {
         stop("a library is missing")
-    }
-enableJIT(3)
+    }})
+#enableJIT(3)
 #source("~/GoogleDrive/unpak-database/tairData/src/const.R")
 source("superhist2.R")
 csvdir <- "csvinputs"
@@ -30,7 +30,7 @@ confirmed.with.fam$SALK_Line <- toupper(confirmed.with.fam$SALK_Line)
 cwf <- confirmed.with.fam #make a new dataframe
 cwf <- unique(cwf[!is.na(cwf$SALK_Line),]) #start to remove duplicate lines
 
-dim(germin)[1]
+#dim(germin)[1]
 
 germin$SALK_Line <- toupper(as.character(germin$SALK_line))
 germ.gene.families <- merge(germin,cwf,all.x=T)
@@ -110,58 +110,8 @@ surv.by.fam.sd <- with(per.rep.merg,aggregate(alive.at.harvest,by=list(GeneFamil
 surv.by.fam$sd <- surv.by.fam.n$x
 @ 
 
-\subsection{Some obvious comparisons}
 
-\subsubsection{Germination rate as a function of gene-family}
-
-<<echo=F,fig.keep='none',comment=NA>>=
- ## Increase bottom margin to make room for rotated labels
-par(mar = c(7, 4, 4, 2) + 0.1)
-      ## Create plot with no x axis and no x axis label
-bp=boxplot(percent~as.factor(abbreviate(GeneFamilyName)),data=germ.gene.families,varwidth=T,horizontal=F,axes=F,ylab="Germination percentage")
-      ## Set up x axis with tick marks alone
-axis(2)
-axis(1, labels = FALSE)
-      ## Plot x axis labels at default tick marks
-text(1:length(bp$names), par("usr")[3] - 0.25, srt = 45, adj = 1,
-     labels = bp$names, xpd = TRUE)
-      ## Plot x axis label at line 6 (of 7)
-mtext(1, text = "Gene Family", line = 6)
-par(mar=c(5,4,4,2)+0.1)
- 
-@ 
-
-
-And here's another test of the same hypothesis using permutation
-approach (may be less affected by unequal var).
-
-<<echo=F,comment=NA>>=
-tobs <- t.test(percent~cntrl,data=germ.gene.families)$statistic
-tperm <- NULL
-for (i in 1:1000)
-  {
-    tperm <- c(tperm,
-               t.test(percent~sample(cntrl,length(cntrl),replace=F),data=germ.gene.families)$statistic
-               )
-  }
-
-print("typeI prob:")
-print(sum(tperm>tobs)/length(tperm))
-
-@ 
-
-\subsection{Survival to harvest as a function of gene family}
-
-Here are analyses that examine the effect of gene family upon survival:
-
-<<echo=F,comment=NA>>=
-summary(aov(mean.survival~GeneFamilyName,data=surv.by.fam))
-@ 
-
-\subsection{Read in the salk copy numbers and process}
-
-
-
+%\subsection{Read in the salk copy numbers and process}
 <<echo=F,comment=NA>>=
 #fold in fitness data
 fitin <- read.csv(paste(csvdir,"RedundancyExperiment1-final.csv",sep="/"),header=T)
@@ -215,7 +165,7 @@ fruit.by.family <- with(fitmerg,
 
 fruit.by.line <- merge(fruit.by.line,unique(fitmerg[,c("SALK_Line","area.ratio","ratiocat","Regulatory")]))
 
-print(dim(fruit.by.line))
+#print(dim(fruit.by.line))
 
 fruit.by.family <- merge(fruit.by.family,unique(fitmerg[,c(1,2,3,21,44,45,47,48,49,50,51,52)]))
 
@@ -241,6 +191,7 @@ mtext("Distribution of mutant lines' fitness\nrelative to ancestor",3,1,cex=1.7)
 box()
 @ 
 
+\subsection{Distribution of mutations relative to control using means only.}
 
 Here are various figures emphasizing variation among mutant lines
 compared to controls.  In this first figure, the distribution of line
@@ -1137,7 +1088,64 @@ hist(snp$snp.strains.mn,main="Distribution of natural accessions with large effe
 hist(sv$sv.strains.mn,main="Distribution of natural accessions with large structural variants",xlab="Number of natural accessions",xlim=c(0,80),breaks=4)
 
 @ 
+
+
+\subsection{Some additional  comparisons we have not emphasized}
+
+\subsubsection{Germination rate as a function of gene-family}
+
+<<germ-vs-fam,echo=F,dev=c('pdf','postscript','CairoPNG'),comment=NA>>=
+ ## Increase bottom margin to make room for rotated labels
+par(mar = c(7, 4, 4, 2) + 0.1)
+      ## Create plot with no x axis and no x axis label
+bp=boxplot(percent~as.factor(abbreviate(GeneFamilyName)),data=germ.gene.families,varwidth=T,horizontal=F,axes=F,ylab="Germination percentage")
+      ## Set up x axis with tick marks alone
+axis(2)
+axis(1, labels = FALSE)
+      ## Plot x axis labels at default tick marks
+text(1:length(bp$names), par("usr")[3] - 0.25, srt = 45, adj = 1,
+     labels = bp$names, xpd = TRUE)
+      ## Plot x axis label at line 6 (of 7)
+mtext(1, text = "Gene Family", line = 6)
+par(mar=c(5,4,4,2)+0.1)
+ 
+@ 
+
+
+And here's another test of the same hypothesis using permutation
+approach (may be less affected by unequal var).
+
+<<echo=F,comment=NA>>=
+tobs <- t.test(percent~cntrl,data=germ.gene.families)$statistic
+tperm <- NULL
+for (i in 1:1000)
+  {
+    tperm <- c(tperm,
+               t.test(percent~sample(cntrl,length(cntrl),replace=F),data=germ.gene.families)$statistic
+               )
+  }
+
+print("typeI prob:")
+print(sum(tperm>tobs)/length(tperm))
+
+@ 
+
+\subsection{Survival to harvest as a function of gene family}
+
+Here are analyses that examine the effect of gene family upon survival:
+
+<<echo=F,comment=NA>>=
+summary(aov(mean.survival~GeneFamilyName,data=surv.by.fam))
+@ 
+
+
+
+
 % 
+
+
+
+
 %
 %
 % Local Variables: 
