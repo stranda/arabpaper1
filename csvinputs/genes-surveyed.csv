@@ -1,33 +1,33 @@
 "SALK_Line","Gene","GeneFamilyName","treattype","fitdev"
 "CS60000",NA,NA,"control",2.84355872182118e-15
+"CS60000",NA,NA,"highwater",0
 "CS60000",NA,NA,"nutrient",-7.86407975776153e-16
 "CS60000",NA,NA,"FIRST.EXP",-1.96686101748934e-15
-"CS60000",NA,NA,"highwater",0
 "CS60000",NA,"Control","control",2.84355872182118e-15
+"CS60000",NA,"Control","highwater",0
 "CS60000",NA,"Control","nutrient",-7.86407975776153e-16
 "CS60000",NA,"Control","FIRST.EXP",-1.96686101748934e-15
-"CS60000",NA,"Control","highwater",0
-"ECOTYPE - 1376",NA,NA,"nutrient",-42.2222222222222
 "ECOTYPE - 1376",NA,NA,"control",-39.3
+"ECOTYPE - 1376",NA,NA,"nutrient",-42.2222222222222
 "ECOTYPE - 1436",NA,NA,"highwater",-12.5
-"ECOTYPE - 1554",NA,NA,"nutrient",36.7777777777778
 "ECOTYPE - 1554",NA,NA,"control",-105.3
-"ECOTYPE - 22587",NA,NA,"highwater",-12.5
+"ECOTYPE - 1554",NA,NA,"nutrient",36.7777777777778
 "ECOTYPE - 22587",NA,NA,"control",-105.3
+"ECOTYPE - 22587",NA,NA,"highwater",-12.5
 "ECOTYPE - 22594",NA,NA,"nutrient",-42.2222222222222
 "ECOTYPE - 22594",NA,NA,"control",86.7
-"ECOTYPE - 22623",NA,NA,"nutrient",-42.2222222222222
-"ECOTYPE - 22623",NA,NA,"control",-105.3
 "ECOTYPE - 22623",NA,NA,"highwater",31
+"ECOTYPE - 22623",NA,NA,"control",-105.3
+"ECOTYPE - 22623",NA,NA,"nutrient",-42.2222222222222
 "ECOTYPE - 22631",NA,NA,"nutrient",105.777777777778
 "ECOTYPE - 22631",NA,NA,"highwater",-12.5
 "ECOTYPE - 22631",NA,NA,"control",42.7
-"ECOTYPE - 22635",NA,NA,"highwater",-12.5
 "ECOTYPE - 22635",NA,NA,"nutrient",42.2777777777778
-"ECOTYPE - 22645",NA,NA,"nutrient",73.7777777777778
+"ECOTYPE - 22635",NA,NA,"highwater",-12.5
 "ECOTYPE - 22645",NA,NA,"control",-79.3
-"ECOTYPE - 6885",NA,NA,"highwater",-12.5
+"ECOTYPE - 22645",NA,NA,"nutrient",73.7777777777778
 "ECOTYPE - 6885",NA,NA,"control",49.7
+"ECOTYPE - 6885",NA,NA,"highwater",-12.5
 "SALK_000234C","AT4G22950","MADS-box Transcription Factor Family","FIRST.EXP",1.78832045454545
 "SALK_001014C","AT1G43700","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",14.7863636363636
 "SALK_002098C","AT1G62990","Homeobox Transcription Factor Family","FIRST.EXP",-25.3954545454545
@@ -48,13 +48,13 @@
 "SALK_015609C","AT4G26580","C3H Transcription Factor Family","FIRST.EXP",8.79743116883117
 "SALK_016682C","AT5G03790","Homeobox Transcription Factor Family","FIRST.EXP",-14.3031116883117
 "SALK_016764C","AT4G13100","C3H Transcription Factor Family","FIRST.EXP",-14.8561006993007
-"SALK_017933C",NA,NA,"control",-54.6
 "SALK_017933C",NA,NA,"nutrient",163.666666666667
 "SALK_017933C",NA,NA,"FIRST.EXP",31.3308829545454
+"SALK_017933C",NA,NA,"control",-54.6
 "SALK_017933C",NA,NA,"highwater",-10.9
-"SALK_017933C","AT3G62710","Glycoside Hydrolase Gene Families","control",-54.6
 "SALK_017933C","AT3G62710","Glycoside Hydrolase Gene Families","nutrient",163.666666666667
 "SALK_017933C","AT3G62710","Glycoside Hydrolase Gene Families","FIRST.EXP",31.3308829545454
+"SALK_017933C","AT3G62710","Glycoside Hydrolase Gene Families","control",-54.6
 "SALK_017933C","AT3G62710","Glycoside Hydrolase Gene Families","highwater",-10.9
 "SALK_018248C","AT2G16770","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",21.3045454545455
 "SALK_019565C","AT2G22630","MADS-box Transcription Factor Family","FIRST.EXP",-11.7111145454545
@@ -62,7 +62,6 @@
 "SALK_021006C","AT1G74990","C3H Transcription Factor Family","FIRST.EXP",8.69545454545454
 "SALK_023712C","AT2G37950","C3H Transcription Factor Family","FIRST.EXP",5.15
 "SALK_023733C","AT4G32880","Homeobox Transcription Factor Family","FIRST.EXP",-31.1025545454545
-"SALK_024341",NA,NA,"FIRST.EXP",-12.1554545454545
 "SALK_025133C","AT2G03000","C3H Transcription Factor Family","FIRST.EXP",-8.25104025974026
 "SALK_027691C","AT4G36730","bZIP Transcription Factor Family","FIRST.EXP",7.94830909090909
 "SALK_027697C","AT1G50440","C3H Transcription Factor Family","FIRST.EXP",10.0322181818182
@@ -70,81 +69,79 @@
 "SALK_031536C","AT3G19020","Leucine-rich repeat extensin","FIRST.EXP",-2.10725454545455
 "SALK_031830C","AT1G68640","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",9.22114545454545
 "SALK_033323C","AT2G01500","Homeobox Transcription Factor Family","FIRST.EXP",-22.4243345454545
-"SALK_033462C",NA,NA,"highwater",-10.7
 "SALK_033462C",NA,NA,"FIRST.EXP",-7.68275454545455
 "SALK_033462C",NA,NA,"nutrient",80.0777777777778
 "SALK_033462C",NA,NA,"control",-43.7
-"SALK_033462C","AT2G32370","Homeobox Transcription Factor Family","highwater",-10.7
+"SALK_033462C",NA,NA,"highwater",-10.7
 "SALK_033462C","AT2G32370","Homeobox Transcription Factor Family","FIRST.EXP",-7.68275454545455
 "SALK_033462C","AT2G32370","Homeobox Transcription Factor Family","nutrient",80.0777777777778
 "SALK_033462C","AT2G32370","Homeobox Transcription Factor Family","control",-43.7
+"SALK_033462C","AT2G32370","Homeobox Transcription Factor Family","highwater",-10.7
 "SALK_033666C","AT1G18470","C3H Transcription Factor Family","FIRST.EXP",-7.12272727272728
-"SALK_033801",NA,NA,"FIRST.EXP",-21.9171936758893
 "SALK_036539C","AT1G74410","C3H Transcription Factor Family","FIRST.EXP",31.3545454545455
 "SALK_037779C","AT3G18650","MADS-box Transcription Factor Family","FIRST.EXP",-8.72725454545455
 "SALK_038445C","AT4G30370","C3H Transcription Factor Family","FIRST.EXP",0.240909090909088
-"SALK_038957C",NA,NA,"highwater",-11.4
 "SALK_038957C",NA,NA,"nutrient",-24.4444444444444
-"SALK_038957C",NA,NA,"FIRST.EXP",-33.6687545454545
+"SALK_038957C",NA,NA,"highwater",-11.4
 "SALK_038957C",NA,NA,"control",-63.7
-"SALK_038957C","AT5G24540","Glycoside Hydrolase Gene Families","highwater",-11.4
+"SALK_038957C",NA,NA,"FIRST.EXP",-33.6687545454545
 "SALK_038957C","AT5G24540","Glycoside Hydrolase Gene Families","nutrient",-24.4444444444444
-"SALK_038957C","AT5G24540","Glycoside Hydrolase Gene Families","FIRST.EXP",-33.6687545454545
+"SALK_038957C","AT5G24540","Glycoside Hydrolase Gene Families","highwater",-11.4
 "SALK_038957C","AT5G24540","Glycoside Hydrolase Gene Families","control",-63.7
+"SALK_038957C","AT5G24540","Glycoside Hydrolase Gene Families","FIRST.EXP",-33.6687545454545
 "SALK_040514C","AT5G12310","C3H Transcription Factor Family","FIRST.EXP",-30.6717545454545
 "SALK_042624C","AT2G21235","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",-34.6814045454545
-"SALK_042704C",NA,NA,"FIRST.EXP",-24.4629745454545
 "SALK_042704C",NA,NA,"highwater",-7.7
-"SALK_042704C",NA,NA,"nutrient",60.8777777777778
 "SALK_042704C",NA,NA,"control",-17.1
-"SALK_042704C","AT2G39930","Glycoside Hydrolase Gene Families","FIRST.EXP",-24.4629745454545
+"SALK_042704C",NA,NA,"FIRST.EXP",-24.4629745454545
+"SALK_042704C",NA,NA,"nutrient",60.8777777777778
 "SALK_042704C","AT2G39930","Glycoside Hydrolase Gene Families","highwater",-7.7
-"SALK_042704C","AT2G39930","Glycoside Hydrolase Gene Families","nutrient",60.8777777777778
 "SALK_042704C","AT2G39930","Glycoside Hydrolase Gene Families","control",-17.1
+"SALK_042704C","AT2G39930","Glycoside Hydrolase Gene Families","FIRST.EXP",-24.4629745454545
+"SALK_042704C","AT2G39930","Glycoside Hydrolase Gene Families","nutrient",60.8777777777778
 "SALK_043219C","AT2G25410","C3H Transcription Factor Family","FIRST.EXP",-5.95545454545455
 "SALK_043475C","AT3G19290","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",-14.4780212121212
 "SALK_045623C","AT5G65050","MADS-box Transcription Factor Family","FIRST.EXP",-21.4820645454545
-"SALK_050488C",NA,NA,"nutrient",-13.5222222222222
-"SALK_050488C",NA,NA,"FIRST.EXP",-27.3405878787879
 "SALK_050488C",NA,NA,"highwater",-7.1
+"SALK_050488C",NA,NA,"FIRST.EXP",-27.3405878787879
+"SALK_050488C",NA,NA,"nutrient",-13.5222222222222
 "SALK_050488C",NA,NA,"control",-51
-"SALK_050488C","AT5G59340","Homeobox Transcription Factor Family","nutrient",-13.5222222222222
-"SALK_050488C","AT5G59340","Homeobox Transcription Factor Family","FIRST.EXP",-27.3405878787879
 "SALK_050488C","AT5G59340","Homeobox Transcription Factor Family","highwater",-7.1
+"SALK_050488C","AT5G59340","Homeobox Transcription Factor Family","FIRST.EXP",-27.3405878787879
+"SALK_050488C","AT5G59340","Homeobox Transcription Factor Family","nutrient",-13.5222222222222
 "SALK_050488C","AT5G59340","Homeobox Transcription Factor Family","control",-51
-"SALK_054680C",NA,NA,"FIRST.EXP",62.3737762237762
-"SALK_054680C",NA,NA,"nutrient",105.377777777778
 "SALK_054680C",NA,NA,"highwater",-7
+"SALK_054680C",NA,NA,"FIRST.EXP",62.3737762237762
 "SALK_054680C",NA,NA,"control",0.600000000000001
-"SALK_054680C","AT3G07120","C3H Transcription Factor Family","FIRST.EXP",62.3737762237762
-"SALK_054680C","AT3G07120","C3H Transcription Factor Family","nutrient",105.377777777778
+"SALK_054680C",NA,NA,"nutrient",105.377777777778
 "SALK_054680C","AT3G07120","C3H Transcription Factor Family","highwater",-7
+"SALK_054680C","AT3G07120","C3H Transcription Factor Family","FIRST.EXP",62.3737762237762
 "SALK_054680C","AT3G07120","C3H Transcription Factor Family","control",0.600000000000001
+"SALK_054680C","AT3G07120","C3H Transcription Factor Family","nutrient",105.377777777778
 "SALK_056385C","AT2G46495","C3H Transcription Factor Family","FIRST.EXP",-28.6204831168831
 "SALK_057747C","AT5G02030","Homeobox Transcription Factor Family","FIRST.EXP",-4.21285454545455
 "SALK_058604C","AT1G08320","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",-2.75326363636364
 "SALK_058993C","AT3G10000","Trihelix Transcription Factor Family","FIRST.EXP",-13.8393878787879
-"SALK_059835C",NA,NA,"nutrient",131.577777777778
-"SALK_059835C",NA,NA,"FIRST.EXP",46.9681818181818
 "SALK_059835C",NA,NA,"control",-22.9
+"SALK_059835C",NA,NA,"FIRST.EXP",46.9681818181818
+"SALK_059835C",NA,NA,"nutrient",131.577777777778
 "SALK_059835C",NA,NA,"highwater",-8.9
-"SALK_059835C","AT4G17460","Homeobox Transcription Factor Family","nutrient",131.577777777778
-"SALK_059835C","AT4G17460","Homeobox Transcription Factor Family","FIRST.EXP",46.9681818181818
 "SALK_059835C","AT4G17460","Homeobox Transcription Factor Family","control",-22.9
+"SALK_059835C","AT4G17460","Homeobox Transcription Factor Family","FIRST.EXP",46.9681818181818
+"SALK_059835C","AT4G17460","Homeobox Transcription Factor Family","nutrient",131.577777777778
 "SALK_059835C","AT4G17460","Homeobox Transcription Factor Family","highwater",-8.9
 "SALK_061729C","AT1G31140","MADS-box Transcription Factor Family","FIRST.EXP",-35.0107295454546
 "SALK_062171C","AT3G61150","Homeobox Transcription Factor Family","FIRST.EXP",-35.9658545454545
-"SALK_063722C",NA,NA,"FIRST.EXP",46.7295454545455
-"SALK_063722C",NA,NA,"nutrient",45.7777777777778
 "SALK_063722C",NA,NA,"control",3.8
 "SALK_063722C",NA,NA,"highwater",-0.4
-"SALK_063722C","AT1G64390","Glycoside Hydrolase Gene Families","FIRST.EXP",46.7295454545455
-"SALK_063722C","AT1G64390","Glycoside Hydrolase Gene Families","nutrient",45.7777777777778
+"SALK_063722C",NA,NA,"nutrient",45.7777777777778
+"SALK_063722C",NA,NA,"FIRST.EXP",46.7295454545455
 "SALK_063722C","AT1G64390","Glycoside Hydrolase Gene Families","control",3.8
 "SALK_063722C","AT1G64390","Glycoside Hydrolase Gene Families","highwater",-0.4
+"SALK_063722C","AT1G64390","Glycoside Hydrolase Gene Families","nutrient",45.7777777777778
+"SALK_063722C","AT1G64390","Glycoside Hydrolase Gene Families","FIRST.EXP",46.7295454545455
 "SALK_063976C","AT2G02770","Acyl Lipid Metabolism Family","FIRST.EXP",23.7318181818182
 "SALK_066755C","AT2G35000","C3H Transcription Factor Family","FIRST.EXP",9.75444545454545
-"SALK_067236",NA,NA,"FIRST.EXP",51.4795454545455
 "SALK_069385C","AT3G18080","Glycoside Hydrolase Gene Families","FIRST.EXP",-8.37929454545455
 "SALK_069450C","AT4G34610","Homeobox Transcription Factor Family","FIRST.EXP",-5.22754545454545
 "SALK_072465C","AT1G76880","Trihelix Transcription Factor Family","FIRST.EXP",-3.93119597402597
@@ -156,17 +153,16 @@
 "SALK_087083C","AT2G15880","Leucine-rich repeat extensin","FIRST.EXP",15.6828454545455
 "SALK_087636C","AT4G38900","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",2.46717878787879
 "SALK_091420C","AT1G51930","C3H Transcription Factor Family","FIRST.EXP",-32.2534545454545
-"SALK_094332C",NA,NA,"nutrient",53.8888888888889
 "SALK_094332C",NA,NA,"control",-34.7
 "SALK_094332C",NA,NA,"highwater",-7.7
+"SALK_094332C",NA,NA,"nutrient",53.8888888888889
 "SALK_094332C",NA,NA,"FIRST.EXP",52.8188311688312
-"SALK_094332C","AT3G18930","C3H Transcription Factor Family","nutrient",53.8888888888889
 "SALK_094332C","AT3G18930","C3H Transcription Factor Family","control",-34.7
 "SALK_094332C","AT3G18930","C3H Transcription Factor Family","highwater",-7.7
+"SALK_094332C","AT3G18930","C3H Transcription Factor Family","nutrient",53.8888888888889
 "SALK_094332C","AT3G18930","C3H Transcription Factor Family","FIRST.EXP",52.8188311688312
 "SALK_094844C","AT1G68690","Trihelix Transcription Factor Family","FIRST.EXP",6.69545454545454
 "SALK_095299C","AT1G65300","MADS-box Transcription Factor Family","FIRST.EXP",-20.5517045454545
-"SALK_096122",NA,NA,"FIRST.EXP",-39.3044545454545
 "SALK_097633C","AT2G44450","Glycoside Hydrolase Gene Families","FIRST.EXP",-20.0392795454545
 "SALK_097868C","AT1G08980","Acyl Lipid Metabolism Family","FIRST.EXP",-34.6954545454545
 "SALK_098302C","AT1G70710","Glycoside Hydrolase Gene Families","FIRST.EXP",-24.0621212121212
@@ -187,26 +183,26 @@
 "SALK_122146C","AT5G38620","MADS-box Transcription Factor Family","FIRST.EXP",-34.4738545454546
 "SALK_124095C","AT1G54060","Trihelix Transcription Factor Family","FIRST.EXP",-6.11615454545455
 "SALK_125264C","AT1G76130","Glycoside Hydrolase Gene Families","FIRST.EXP",39.9795454545455
+"SALK_126600C",NA,NA,"FIRST.EXP",-18.9787878787879
+"SALK_126600C",NA,NA,"highwater",-9.4
 "SALK_126600C",NA,NA,"nutrient",156.277777777778
 "SALK_126600C",NA,NA,"control",-35.5
-"SALK_126600C",NA,NA,"highwater",-9.4
-"SALK_126600C",NA,NA,"FIRST.EXP",-18.9787878787879
+"SALK_126600C","AT3G15850","Acyl Lipid Metabolism Family","FIRST.EXP",-18.9787878787879
+"SALK_126600C","AT3G15850","Acyl Lipid Metabolism Family","highwater",-9.4
 "SALK_126600C","AT3G15850","Acyl Lipid Metabolism Family","nutrient",156.277777777778
 "SALK_126600C","AT3G15850","Acyl Lipid Metabolism Family","control",-35.5
-"SALK_126600C","AT3G15850","Acyl Lipid Metabolism Family","highwater",-9.4
-"SALK_126600C","AT3G15850","Acyl Lipid Metabolism Family","FIRST.EXP",-18.9787878787879
 "SALK_127261C","AT1G17920","Homeobox Transcription Factor Family","FIRST.EXP",-27.3951545454545
 "SALK_127828C","AT1G05230","Homeobox Transcription Factor Family","FIRST.EXP",-21.0884945454545
 "SALK_129274C","AT3G26730","C3H Transcription Factor Family","FIRST.EXP",35.160101010101
 "SALK_132285C","AT3G10800","basic region leucine zipper (bZIP) Transcription Factor","FIRST.EXP",-21.7287878787879
 "SALK_133498C","AT1G75940","Glycoside Hydrolase Gene Families","FIRST.EXP",-23.0334545454545
 "SALK_134535C",NA,NA,"nutrient",-21.2222222222222
-"SALK_134535C",NA,NA,"FIRST.EXP",-26.7042045454545
 "SALK_134535C",NA,NA,"control",-92.8
+"SALK_134535C",NA,NA,"FIRST.EXP",-26.7042045454545
 "SALK_134535C",NA,NA,"highwater",-12.5
 "SALK_134535C","AT2G01430","Homeobox Transcription Factor Family","nutrient",-21.2222222222222
-"SALK_134535C","AT2G01430","Homeobox Transcription Factor Family","FIRST.EXP",-26.7042045454545
 "SALK_134535C","AT2G01430","Homeobox Transcription Factor Family","control",-92.8
+"SALK_134535C","AT2G01430","Homeobox Transcription Factor Family","FIRST.EXP",-26.7042045454545
 "SALK_134535C","AT2G01430","Homeobox Transcription Factor Family","highwater",-12.5
 "SALK_134703C","AT5G01380","Trihelix Transcription Factor Family","FIRST.EXP",-28.4583920454545
 "SALK_135114C","AT2G22120","C3H Transcription Factor Family","FIRST.EXP",-24.6681818181818

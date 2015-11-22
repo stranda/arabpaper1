@@ -1,15 +1,20 @@
 \section*{Reworked analyses and figure drafts for paper1 after JEB reviews}
 
 <<echo=F,results='markup',comment=NA>>=
-suppressMessages({if (!(require(Hmisc)&require(lme4)&require(lattice)&require(compiler)&require(car)))
+suppressMessages({if (!(require(Hmisc)&require(lattice)&require(compiler)&require(car)&require(multcomp)&require(dplyr)&require(nlme)&require(lme4)))
     {
         stop("a library is missing")
     }})
+
+print(paste("does gls exist",exists("gls")))
+
 #enableJIT(3)
 #source("~/GoogleDrive/unpak-database/tairData/src/const.R")
 source("superhist2.R")
 csvdir <- "csvinputs"
-INCLUDE.GERM <- T
+
+INCLUDE.GERM <- T  #if true, then fitness is adjusted by the average germination rate for that line
+
 germin <- read.csv(file=paste(csvdir,"germination-datasets.csv",sep="/"),header=T)
 @ 
 
@@ -153,6 +158,10 @@ SFsize <- with(fsdf,aggregate(FamilySize,by=list(SuperGeneFamilyName=SuperGeneFa
 names(SFsize)[2] <- "SFamilySize"
 fitmerg <- merge(fitmerg,SFsize,all.x=T)
 
+fitmerg <- fitmerg[grep("C",as.character(fitmerg$SALK_Line)),]#make sure there are only confirmed lines included
+fitmerg$SALK_Line <- as.factor(fitmerg$SALK_Line)
+fitmerg$SALK_Line <- relevel(fitmerg$SALK_Line,"SALK_CS60000")
+
 fruit.by.line <- with(fitmerg,
                      aggregate(cbind(fitness, fitdev, fitdevng, propabort,FamilySize),
                                by=list(SALK_Line=SALK_Line),mean,na.rm=T)
@@ -174,22 +183,9 @@ fitmads <- fitmerg[(fitmerg$GeneFamilyName=="MADS-box Transcription Factor Famil
                    (fitmerg$GeneFamilyName=="Control"), ]
 
 
+#fitmerg <- fitmerg[fitmerg$GeneFamilyName!="MADS-box Transcription Factor Family",]
 @ 
 \section{Distribution of mutations}
-This is a redraw of the theoretical figure (fig 1) using R code:
-
-<<theory-predict,dev=c('pdf','postscript','CairoPNG'),echo=F,fig.keep='none',out.width='"0.6\\fullwidth"',comment=NA>>=
-#xfig("theory.fig")
-d=seq(0.00,1,0.01)
-exp.height=dexp(0,10)/100
-plot(dbeta(sort(d,decreasing=T),1.9,6.4)~d,type="l",axes=F,xlab="Fitness",ylab="", xlim=c(0,1.5),lwd=3, cex.lab=1.5)
-mtext("Frequency of mutant lines",2,1,cex=1.5)
-mtext("Ancestor's\nfitness",1,1.3,at=1,cex=1.2)
-mtext("Low",1,0.5,at=0.1,cex=1.2)
-mtext("High",1,0.5,at=1.4,cex=1.2)
-mtext("Distribution of mutant lines' fitness\nrelative to ancestor",3,1,cex=1.7)
-box()
-@ 
 
 \subsection{Distribution of mutations relative to control using means only.}
 
@@ -199,7 +195,11 @@ means is plotted with the distribution of all control plants as well
 as 116 resampled means of control replicates equal in size to the
 average number of reps per SALK line
 
-<<compare-to-control3,echo=F,fig.keep='none',dev=c('pdf','postscript','CairoPNG'),comment=NA,cache=F>>=
+This figure focuses on the resampled control means and compares to
+individual line means.  This is the figure we placed in the ms
+
+
+<<fig1-compare-to-control,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),cache=T>>=
 
 fruit.by.line$cntrl <- ifelse(fruit.by.line$SALK_Line=="SALK_CS60000",T,F)
 
@@ -208,7 +208,6 @@ names(repcnt)[2] <- "reps"
 fitmerg <- merge(fitmerg,repcnt)
 avg.reps <- mean(fitmerg$reps[(fitmerg$reps>1)&(as.character(fitmerg$SALK_Line)!="SALK_CS60000")])
 fitline <- with(fitmerg[(fitmerg$reps>1),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
-###fitline <- with(fitmerg[(fitmerg$reps>1)&(as.character(fitmerg$SALK_Line)!="SALK_CS60000"),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
 names(fitline)[2] <- "fitdev"
 
 numreps <- 10*dim(fitline)[1]
@@ -227,7 +226,7 @@ cntrls <- fitmerg$fitdev[as.character(fitmerg$SALK_Line)=="SALK_CS60000"]
 #make the figure
 #
 
-addq <- function(quant,ctmn,ctsd)
+addq <- function(quant,ctmn,ctsd) #add quantiles
   {
     points(x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),2)),
            y=c(0,0.03),type="l",col="red")
@@ -235,21 +234,13 @@ addq <- function(quant,ctmn,ctsd)
          x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),1)),y=c(0.031))
   }
 
-superhist2(list(fitline[,2],cntrlmeans,cntrls),main="Difference in fitnesses and control mean",nbreaks=10,ylab="",xlab="Fitness deviation from control",cex.lab=1.5,cex.axis=1.3)
-
-
-
 fitline.alldata <- merge(fitline,fitmerg[,-which(names(fitmerg)%in%c("fitdev"))],all.x=T)
 fitline.alldata <- fitline.alldata[order(fitline.alldata$fitdev),]
 write.table(file=paste(csvdir,"fitlines.csv",sep="/"),fitline.alldata,row.names=F,col.names=T,sep=',')
 
 fitline.alldata$flowers <- with(fitline.alldata,fruitnum+abortn+fruits.removed)
 
-@ 
 
-This figure compares just the resampled means to the SALK line means
-
-<<fig1-compare-to-control,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),comment=NA>>=
 par(mar=c(5,5,1,1)+0.1)
 
 superhist2(list(cntrlmeans,fitline[,2]),main="",nbreaks=10,ylab="Density",xlab="Fitness deviation from control",cex.lab=1.5,cex.axis=1.3,freq=F,xl=c(-50,70))
@@ -262,7 +253,7 @@ y <- 0.03
 if (.Device %in% c("pdf","png","CairoPNG"))
   {
     legend(x=19,y=y*1.4,
-         c("Resampled controls","Means of 116 Salk lines"),
+         c("Resampled controls",paste("Means of",length(unique(fitmerg$SALK_Line))-1,"Salk lines")),
        fill=hcl(h = seq(30, by=360 / 2, length = 2),
          l = 65, alpha = 0.5),cex=1.0,bty="n")
   } else
@@ -305,32 +296,154 @@ if (ninefive)
 
 @ 
 
-Here are the number of line means less than control
+\subsection{Additions suggested by JEB reviewer 1}
 
-<<>>=
+\subsubsection{Some diagnostics}
+
+\paragraph{Does variance within a line depend on fruitnumber?}  This is the classic variance/mean correlation
+
+The answer in the figure below is that variance does depend on mean.
+
+<<var.mean,echo=F,fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG')>>=
+plot(linevar~fruitnum,data=fitmerg%>%group_by(SALK_Line)%>%summarise(linevar=var(fruitnum,na.rm=T),fruitnum=mean(fruitnum,na.rm=T)))
+@ 
+
+\paragraph{is there a reason to expect that survival rate in a line is related to average fruitnum for the line?}
+Looks like if there is any pattern, it is the low fruitnumbers that have the high survival.
+
+<<surv.fruit,echo=F,fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG')>>=
+plot(alive.at.harvest~fruitnum,data=fitmerg%>%group_by(SALK_Line)%>%summarise(alive.at.harvest=mean(alive.at.harvest,na.rm=T),fruitnum=mean(fruitnum,na.rm=T)))
+@ 
+
+Does look like there is a similar pattern in  abort/alive-at-harvest relationship
+
+<<surv.abort,echo=F,out.width="4in",dev=c('pdf','CairoPNG')>>=
+plot(alive.at.harvest~abortnum,data=fitmerg%>%group_by(SALK_Line)%>%summarise(alive.at.harvest=mean(alive.at.harvest,na.rm=T),abortnum=mean(abortn,na.rm=T)))
+@ 
+
+
+\subsubsection{Crafting the best linear model to underly a testing framework}
+There is going to be heteroschedacity as established above.  The figure below shows the residual by fitted response for a 
+plain OLS anova:  fitness as a function of line.  Clearly there is terrible heteroscedacity
+
+<<bad.resid,echo=F,out.width="4in",dev=c('pdf','CairoPNG')>>=
+fit.aov <- aov(fitdev~SALK_Line,data=fitmerg)
+plot(resid(fit.aov)~fitted(fit.aov),xlab="Fitted values",ylab="Residuals")
+@ 
+
+<<calc.gls,echo=F,results="hide",cache=T>>=
+suppressMessages(require(nlme))
+
+fit.gls <- gls(fitdev~SALK_Line,data=fitmerg,method="REML")
+fit.gls.id <- gls(fitdev~SALK_Line,weights=varIdent(form=~1|SALK_Line),data=fitmerg,method="REML")
+@ 
+
+This figure shows the same plot using standardized residuals after
+using a weighting scheme that allows each line to have a separate
+variance (this does add tons of parameters to the model, however).  You can see
+that the heteroschedacity disappears.
+
+<<stand.resid,echo=F,out.width="4in",dev=c('pdf','CairoPNG')>>=
+plot(resid(fit.gls.id,type="pearson")~fitted(fit.gls.id),
+     xlab="Fitted",ylab="Residual",main="Standardized residuals (Pearson resids in R) versus fitted\nGLS model with separate variance estimates")
+@ 
+
+Is the addition of all the extra parameters worth it? They
+dramatically improve residual performance. The following likelihood
+ratio tests suggest that the extra parameters still produces a much
+better model.  ``fit.gls'' is a ``standard anova'', ``fit.gls.id'' is
+the same model with individual line variance weighting.
+
+<<echo=F>>=
+anova(fit.gls,fit.gls.id)
+anova(fit.gls.id)
+@ 
+
+
+\subsubsection{Multiple test approach using treatment contrasts}
+
+First,  we could look at dummy contrast coding comparing each
+line to the control. Technically this could be thought of as a planned
+comparison. Hard for me to swallow this and I expect the same is true for 
+reviewers.
+
+I've produced a histogram of effect sizes calculated as t-statistics
+in comparison to the control.  The interval between the blue lines
+indicates lines that are not different than controls after correcting
+the significance of these t-stats using Bonferroni.  There is one line
+to the left of the blue interval and 11 to the right of the blue
+interval(?!).  The interval among the red line corresponds to no
+correction for multiple tests. In this case, 30 lines are lower than
+the red interval and 22 are larger.
+
+<<contrast-comps,echo=F>>=
+#fitmerg holds the data 
+fitmerg$SALK_Line <- as.factor(fitmerg$SALK_Line)
+fitmerg$SALK_Line <- relevel(fitmerg$SALK_Line,"SALK_CS60000")
+fit.lm <- lm(fitness~SALK_Line,data=fitmerg)
+
+coef.lm <- summary(fit.lm)$coefficients
+coef.lm <- coef.lm[order(coef.lm[,3]),]
+coef.lm <- as.data.frame(coef.lm)
+coef.lm$sig <- ifelse(coef.lm[,4]<=(0.05),TRUE,FALSE)
+coef.lm$bonsig <- ifelse(coef.lm[,4]<=(0.05/120),TRUE,FALSE)
+hist(coef.lm[,3],main="Distribution of effect sizes (t-stats) comparing to control",xlab="Effect size (t-statistic from analysis of regression coef)")
+abline(v=max(coef.lm[(coef.lm[,"bonsig"])&(coef.lm[,3]<0),3]), col="blue")
+abline(v=min(coef.lm[(coef.lm[,"bonsig"])&(coef.lm[,3]>0),3]), col="blue")
+
+abline(v=max(coef.lm[(coef.lm[,"sig"])&(coef.lm[,3]<0),3]), col="red")
+abline(v=min(coef.lm[(coef.lm[,"sig"])&(coef.lm[,3]>0),3]), col="red")
+print("Numbers of lines that have more extreme fitness than control: bonferroni correction")
+with(coef.lm,table(bonsig,(coef.lm[,3]>0)))
+print("Numbers of lines that have more extreme fitness than control: no correction")
+with(coef.lm,table(sig,(coef.lm[,3]>0)))
+@ 
+
+\subsubsection{Multiple test approach using Dunnett's many to one test}
+The classic post-hoc test for comparing many treatments to a control
+is Dunnett's test.  It corrects for multiple tests.
+
+<<echo=F,cache=T>>=
+fit <- aov(fitdev~SALK_Line,data=fitmerg)
+m1 <- diag(1,120,120)
+K <- as.matrix(cbind(rep(-11,120),m1))
+fit.dunnetts <- glht(fit,linfct=mcp(SALK_Line="Dunnett"))
+#summ.fit.dunnetts <- summary(fit.dunnetts)
+@ 
+
+<<echo=F>>=
+#coef.dun <- data.frame(do.call(cbind,summ.fit.dunnetts$test[5:6]))
+#names(coef.dun) <- c("tvalues","pvalues")
+#coef.dun$sig <- ifelse(coef.dun$pvalues<=0.05,TRUE,FALSE)
+#hist(coef.dun[,1],main="Distribution of effect sizes (t-stats) comparing to control (Dunnett)",xlab="Effect size (t-statistic from Dunnett's test)")
+#abline(v=max(coef.dun[(coef.dun[,"sig"])&(coef.dun[,1]<0),1]), col="blue")
+#abline(v=min(coef.dun[(coef.dun[,"sig"])&(coef.dun[,1]>0),1]), col="blue")
 
 @ 
 
-<<fitmads,echo=F,dev=c('pdf','postscript','CairoPNG')>>=
+\subsubsection{Specific comparisons among a-priori-chosen subsets of genes}
+Here is a comparison of the controls to all mads-box genes
+
+<<fitmads,echo=F,dev=c('pdf','CairoPNG')>>=
 boxplot(fitdev~GeneFamilyName,data=fitmads,ylab="Fitness deviation from control",xlab="Gene family knockouts")
 print(summary(aov(fitdev~GeneFamilyName,fitmads)))
 print(t.test(fitdev~GeneFamilyName,fitmads))
 @ 
 
-Here is the distribution of fitness effects among mads box genes
+Here is the distribution of fitness effects among mads box genes along
+with a test of among-line differences
 
-<<fitmads2,echo=F,dev=c('pdf','postscript','CairoPNG')>>=
-bwplot(fitdev~SALK_Line,data=fitmads,horizontal=T,ylab="Fitness deviation from control",xlab="MADS lines")
-print(summary(aov(fitdev~SALK_Line,fitmads)))
+<<fitmads2,echo=F,dev=c('pdf','CairoPNG'),out.width="4in">>=
 mnmads <- with(fitmads,aggregate(cbind(fitness,fitdev),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
 mnmads <- merge(mnmads,unique(fitmads[,c("SALK_Line","Gene","Gene_Name")]))
-#write.table(file="MADS-function.csv",sep=",",row.names=F,mnmads)
 dotplot(SALK_Line~fitdev,mnmads)
+print(summary(aov(fitdev~SALK_Line,fitmads)))
+
 @ 
 
 
 
-<<compare-to-control-back2back,echo=F,fig.keep='none',dev=c('pdf','postscript','CairoPNG'),comment=NA>>=
+<<compare-to-control-back2back,echo=F,fig.keep='none',dev=c('pdf','CairoPNG'),comment=NA>>=
 b2b <- histbackback(list(cntrlmeans,fitline[,2]),axes=F)
 abline(v=0,lwd=2)
 
@@ -369,7 +482,7 @@ plot(fitline.means[,-1],pch=c(1,15)[indic],col=indic,cex=c(1,1.4)[indic])
 #plotmatrix(fitline.means[,-1])
 @ 
 
-<<fig-s3-fitness-components,echo=F,fig.keep='high',fig.width=7,fig.height=4,dev=c("pdf","CairoPNG","postscript"),comment=NA>>=
+<<fig-s3-fitness-components,echo=F,fig.keep='high',fig.width=7,fig.height=4,dev=c("pdf","CairoPNG"),comment=NA>>=
 #plot(fitline.alldata[,c("fitness","flowers","fruitnum","mass","percent","silique","abortn")])
 fitline.means <- with (fitline.alldata,aggregate(cbind(fitness,flowers,fruitnum,mass,abortn,percent,silique,alive.at.harvest),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
 indic=1+(fitline.means$SALK_Line=="SALK_CS60000")
@@ -430,13 +543,13 @@ print(sum(tperm>tobs)/length(tperm))
 Here is a plot that relates our total measure of fitness in the lines
 used in the original pilot study to the ratio of tdna to endogenous genes
 
-<<fig-s1-tdna-dist,echo=F,fig.keep='high',dev=c("CairoPNG","postscript","pdf"),comment=NA>>=
+<<fig-s1-tdna-dist,echo=F,fig.keep='high',dev=c("CairoPNG","pdf"),comment=NA>>=
 hist(log(fruit.by.line$area.ratio),xlab="ln(ratio of TDNA/petC)",
      main="",cex.axis=1.2,cex.lab=1.4,lwd=2,ylim=c(-2,25))
 arrows(y0=-2,y1=0,x0=log(1.5),x1=log(1.5),lwd=2)
 @ 
 
-<<fig-s2-TDNA-ratio-plot,echo=F,fig.keep='high',dev=c("CairoPNG","postscript","pdf"),comment=NA>>=
+<<fig-s2-TDNA-ratio-plot,echo=F,fig.keep='high',dev=c("CairoPNG","pdf"),comment=NA>>=
 plot(fitdev~log(area.ratio),fruit.by.line,cex.axis=1.2,cex.lab=1.4,lwd=2,
      xlab="Natural log of ratio tdna/PetC",
      ylab="Average deviation from the fitness of the ancestor")
@@ -502,7 +615,7 @@ summary(lm(fitdev~FamilySize,subset=Regulatory=="yes",fruit.by.line))
 
 @ 
 
-<<fig2-gene-fam-vs-fitdev,echo=F,fig.keep='high',dev=c("pdf","postscript","CairoPNG"),fig.width=3.5,fig.height=3.5,comment=NA>>=
+<<fig2-gene-fam-vs-fitdev,echo=F,fig.keep='high',dev=c("pdf","CairoPNG"),fig.width=3.5,fig.height=3.5,comment=NA>>=
 par(mar=c(5,5,1,1)+0.1)
 plot(1,1,type="n",xlab="Gene Family Size",ylab="Fitness deviation\nfrom ancestor",ylim=c(-80,80),xlim=c(0,400),cex.axis=1.0,cex.lab=1.0)
 points(fitdev~FamilySize,data=fruit.by.line,pch=c(1,16)[1+(fruit.by.line$Regulatory=="yes")],cex=1.0)
@@ -526,7 +639,6 @@ summary(lm(log(fitdev+40)~FamilySize,subset=Regulatory=="yes",fruit.by.line))
 Here is a little more sophisticated analysis of the family size effect
 
 <<>>=
-library(nlme)
 fm1 <- lme(fixed=fitdev~FamilySize,random=~1|SALK_Line,method="ML",subset=Regulatory=="yes",na.action=na.exclude,data=fitmerg)
 #plot(fm1)
 vfix <- varFixed(~FamilySize)
@@ -817,7 +929,7 @@ dotplot(lohi~gene.family.size,data=hilo.fam,main="Compare family sizes for the h
 
 Now here is the figure with straight mean fruit number per line:
 
-<<fig3-reaction-norm1-fit,fig.display='high',fig.width=10,fig.height=10,echo=F,dev=c("pdf","postscript","CairoPNG"),comment=NA>>=
+<<fig3-reaction-norm1-fit,fig.display='high',fig.width=10,fig.height=10,echo=F,dev=c("pdf","CairoPNG"),comment=NA>>=
 
 par(mar=c(5,5,4,2)+0.1)
 plot(1~1,type="n",data=lineacrosstrt,ylim=range(lineacrosstrt$fitness),xlim=c(0.8,3.2),
@@ -1082,7 +1194,7 @@ with(unique(sv),table(sv.strains.mn>0))
 
 
 The following figure illustrates the distribution of the naturally occurring variants in our collection of lines.
-<<fig-s4,fig.display='high',echo=F,dev=c("pdf","postscript","CairoPNG")>>=
+<<fig-s4,fig.display='high',echo=F,dev=c("pdf","CairoPNG")>>=
 par(mfrow=c(2,1))
 hist(snp$snp.strains.mn,main="Distribution of natural accessions with large effect SNPs",xlab="Number of natural accessions",xlim=c(0,80))
 hist(sv$sv.strains.mn,main="Distribution of natural accessions with large structural variants",xlab="Number of natural accessions",xlim=c(0,80),breaks=4)
@@ -1094,7 +1206,7 @@ hist(sv$sv.strains.mn,main="Distribution of natural accessions with large struct
 
 \subsubsection{Germination rate as a function of gene-family}
 
-<<germ-vs-fam,echo=F,dev=c('pdf','postscript','CairoPNG'),comment=NA>>=
+<<germ-vs-fam,echo=F,dev=c('pdf','CairoPNG'),comment=NA>>=
  ## Increase bottom margin to make room for rotated labels
 par(mar = c(7, 4, 4, 2) + 0.1)
       ## Create plot with no x axis and no x axis label
@@ -1109,6 +1221,18 @@ text(1:length(bp$names), par("usr")[3] - 0.25, srt = 45, adj = 1,
 mtext(1, text = "Gene Family", line = 6)
 par(mar=c(5,4,4,2)+0.1)
  
+@ 
+
+Though there is variation among families in germination rate, family size does not explain it.
+
+<<germ-vs-fam-size,echo=F,dev=c('pdf','CairoPNG'),comment=NA>>=
+## Increase bottom margin to make room for rotated labels
+plot(percent~(gene.family.size),data=germ.gene.families,ylab="Germination percentage per family")
+      ## Set up x axis with tick marks alone
+fit.gfs <- lm(percent~(gene.family.size),data=germ.gene.families)
+abline(coef(fit.gfs))
+summary(fit.gfs)
+       
 @ 
 
 

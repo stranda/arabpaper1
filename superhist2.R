@@ -1,9 +1,9 @@
 ##x has to be a list of different vectors to compare
 ## i.e. superhist2(x=list(a,b))
-superhist2 <- function(x, freq=T,  nbreaks ="Sturges",xl=NULL,...)
+superhist2 <- function(x, freq=T,  nbreaks ="Sturges",xl=NULL,verb=F,...)
 {
   dev <- .Device
-  print(dev)
+  if (verb)  print(dev)
   junk = NULL
   grouping = NULL
   for(i in 1:length(x))
