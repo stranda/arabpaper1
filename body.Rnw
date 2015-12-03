@@ -1,7 +1,7 @@
 \section*{Reworked analyses and figure drafts for paper1 after JEB reviews}
 
 <<echo=F,results='markup',comment=NA>>=
-suppressMessages({if (!(require(Hmisc)&require(lattice)&require(compiler)&require(car)&require(multcomp)&require(dplyr)&require(nlme)&require(lme4)))
+suppressMessages({if (!(require(Hmisc)&require(lattice)&require(compiler)&require(car)&require(multcomp)&require(dplyr)&require(nlme)&require(lme4)&require(parallel)&require(pscl)))
     {
         stop("a library is missing")
     }})
@@ -16,6 +16,8 @@ csvdir <- "csvinputs"
 INCLUDE.GERM <- T  #if true, then fitness is adjusted by the average germination rate for that line
 
 germin <- read.csv(file=paste(csvdir,"germination-datasets.csv",sep="/"),header=T)
+
+
 @ 
 
 <<echo=F,results='markup',comment=NA>>=
@@ -184,6 +186,21 @@ fitmads <- fitmerg[(fitmerg$GeneFamilyName=="MADS-box Transcription Factor Famil
 
 
 #fitmerg <- fitmerg[fitmerg$GeneFamilyName!="MADS-box Transcription Factor Family",]
+
+fruit.by.line$cntrl <- ifelse(fruit.by.line$SALK_Line=="SALK_CS60000",T,F)
+repcnt <- with(fitmerg,aggregate(fitdev,by=list(SALK_Line=SALK_Line),length))
+names(repcnt)[2] <- "reps"
+fitmerg <- merge(fitmerg,repcnt)
+
+fitline <- with(fitmerg[(fitmerg$reps>1),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
+names(fitline)[2] <- "fitdev"
+
+fitline.alldata <- merge(fitline,fitmerg[,-which(names(fitmerg)%in%c("fitdev"))],all.x=T)
+fitline.alldata <- fitline.alldata[order(fitline.alldata$fitdev),]
+write.table(file=paste(csvdir,"fitlines.csv",sep="/"),fitline.alldata,row.names=F,col.names=T,sep=',')
+
+fitline.alldata$flowers <- with(fitline.alldata,fruitnum+abortn+fruits.removed)
+
 @ 
 \section{Distribution of mutations}
 
@@ -197,103 +214,109 @@ average number of reps per SALK line
 
 This figure focuses on the resampled control means and compares to
 individual line means.  This is the figure we placed in the ms
+<<echo=F>>=
 
+
+comp2ctrl <- function(fitdat,
+                      avg.reps=mean(fitdat$reps[(fitdat$reps>1)&(as.character(fitdat$SALK_Line)!="SALK_CS60000")])
+)
+    {
+        
+        fitline <- with(fitdat[(fitdat$reps>1),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
+        names(fitline)[2] <- "fitdev"
+        numreps <- 10*dim(fitline)[1]
+        cntrlmeans <- rep(0,numreps)
+        for (i in 1:numreps)
+            {
+                cntrlmeans[i] <- mean(
+                    sample(fitdat$fitdev[as.character(fitdat$SALK_Line)=="SALK_CS60000"],
+                           size=round(avg.reps)
+                           )
+                    )
+            }
+        cntrls <- fitdat$fitdev[as.character(fitdat$SALK_Line)=="SALK_CS60000"]
+        
+                                        #
+                                        #make the figure
+                                        #
+        
+        addq <- function(quant,ctmn,ctsd) #add quantiles
+            {
+                points(x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),2)),
+                       y=c(0,0.03),type="l",col="red")
+                text(paste(quant),
+                     x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),1)),y=c(0.031))
+            }
+        
+        
+        
+        par(mar=c(5,5,1,1)+0.1)
+        
+        superhist2(list(cntrlmeans,fitline[,2]),main="",nbreaks=10,ylab="Density",xlab="Fitness deviation from control",cex.lab=1.5,cex.axis=1.3,freq=F,xl=c(-50,70))
+        
+        madsmns <- with(fitmads,aggregate(cbind(fitdev),by=list(SALK_Line=SALK_Line),mean))[,2]
+        points(y=rep(-0.0007,length(madsmns)),x=madsmns,pch=16,cex=0.8,col="black")
+        
+        y <- 0.03
+        
+        if (.Device %in% c("pdf","png","CairoPNG"))
+            {
+                legend(x=19,y=y*1.4,
+                       c("Resampled controls",paste("Means of",length(unique(fitdat$SALK_Line))-1,"Salk lines")),
+                       fill=hcl(h = seq(30, by=360 / 2, length = 2),
+                           l = 65, alpha = 0.5),cex=1.0,bty="n")
+            } else
+                {
+                    legend(x=19,y=y*1.4,
+                           c("Resampled controls","Means of 116 Salk lines"),
+                           density=c(20,25),
+                           angle=c(45,15),
+                           cex=1.1,bty="n")
+                }
+        
+        ninefive = TRUE
+        
+        if (ninefive)
+            {
+                ninety.five.bounds <- quantile(cntrlmeans,c(0.025,0.975))
+                
+                arrows(x0=ninety.five.bounds[2],y0=y*0.72,x1=ninety.five.bounds[2]*1.9,y1=y*0.72,lwd=1.8)
+                text(x=ninety.five.bounds[2]*2.2,y=y*0.9,
+                     paste(round(100*sum(fitline[,2]>ninety.five.bounds[2])/dim(fitline)[1]),
+                           " of lines greater\nthan control",sep="%"))
+                arrows(x0=ninety.five.bounds[1],y0=y*0.72,x1=ninety.five.bounds[1]*1.9,y1=y*0.72,lwd=1.8)
+                text(x=ninety.five.bounds[1]*2,y=y*0.9,
+                     paste(round(100*sum(fitline[,2]<ninety.five.bounds[1])/dim(fitline)[1]),
+                           " of lines\nless than control",sep="%"))
+                abline(v=ninety.five.bounds[1],lwd=1.5,col="gray")
+                abline(v=ninety.five.bounds[2],lwd=1.5,col="gray")
+            } else {
+                
+                arrows(x0=max(cntrlmeans)*1.15,y0=y*0.7,x1=max(c(cntrlmeans,fitline[,2])),y1=y*0.7,lwd=1.8)
+                text(x=max(cntrlmeans)*1.87,y=y*0.9,
+                     paste(round(100*sum(fitline[,2]>max(cntrlmeans))/dim(fitline)[1]),
+                           " of lines greater than\nmaximum control sample",sep="%"))
+                arrows(x0=min(cntrlmeans)*1.1,y0=y*0.7,x1=min(c(cntrlmeans,fitline[,2])),y1=y*0.7,lwd=1.8)
+                text(x=min(cntrlmeans)*1.5,y=y*0.95,
+                     paste(round(100*sum(fitline[,2]<min(cntrlmeans))/dim(fitline)[1]),
+               " of lines\nless than minimum\ncontrol sample",sep="%"))
+                
+            }
+    }
+@ 
 
 <<fig1-compare-to-control,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),cache=T>>=
+comp2ctrl(fitmerg)
+@ 
 
-fruit.by.line$cntrl <- ifelse(fruit.by.line$SALK_Line=="SALK_CS60000",T,F)
+The next set of figures shows what happens when only small numbers of individuals are pulled from the full distribution.  The sample sizes are: 2, 4, 8, and 10.
 
-repcnt <- with(fitmerg,aggregate(fitdev,by=list(SALK_Line=SALK_Line),length))
-names(repcnt)[2] <- "reps"
-fitmerg <- merge(fitmerg,repcnt)
-avg.reps <- mean(fitmerg$reps[(fitmerg$reps>1)&(as.character(fitmerg$SALK_Line)!="SALK_CS60000")])
-fitline <- with(fitmerg[(fitmerg$reps>1),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
-names(fitline)[2] <- "fitdev"
-
-numreps <- 10*dim(fitline)[1]
-cntrlmeans <- rep(0,numreps)
-for (i in 1:numreps)
-  {
-    cntrlmeans[i] <- mean(
-                          sample(fitmerg$fitdev[as.character(fitmerg$SALK_Line)=="SALK_CS60000"],
-                                 size=round(avg.reps)
-                                 )
-                          )
-  }
-cntrls <- fitmerg$fitdev[as.character(fitmerg$SALK_Line)=="SALK_CS60000"]
-
-#
-#make the figure
-#
-
-addq <- function(quant,ctmn,ctsd) #add quantiles
-  {
-    points(x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),2)),
-           y=c(0,0.03),type="l",col="red")
-    text(paste(quant),
-         x=c(rep(qnorm(quant,mean=ctmn,sd=ctsd),1)),y=c(0.031))
-  }
-
-fitline.alldata <- merge(fitline,fitmerg[,-which(names(fitmerg)%in%c("fitdev"))],all.x=T)
-fitline.alldata <- fitline.alldata[order(fitline.alldata$fitdev),]
-write.table(file=paste(csvdir,"fitlines.csv",sep="/"),fitline.alldata,row.names=F,col.names=T,sep=',')
-
-fitline.alldata$flowers <- with(fitline.alldata,fruitnum+abortn+fruits.removed)
-
-
-par(mar=c(5,5,1,1)+0.1)
-
-superhist2(list(cntrlmeans,fitline[,2]),main="",nbreaks=10,ylab="Density",xlab="Fitness deviation from control",cex.lab=1.5,cex.axis=1.3,freq=F,xl=c(-50,70))
-
-madsmns <- with(fitmads,aggregate(cbind(fitdev),by=list(SALK_Line=SALK_Line),mean))[,2]
-points(y=rep(-0.0007,length(madsmns)),x=madsmns,pch=16,cex=0.8,col="black")
-
-y <- 0.03
-
-if (.Device %in% c("pdf","png","CairoPNG"))
-  {
-    legend(x=19,y=y*1.4,
-         c("Resampled controls",paste("Means of",length(unique(fitmerg$SALK_Line))-1,"Salk lines")),
-       fill=hcl(h = seq(30, by=360 / 2, length = 2),
-         l = 65, alpha = 0.5),cex=1.0,bty="n")
-  } else
-  {
-  legend(x=19,y=y*1.4,
-         c("Resampled controls","Means of 116 Salk lines"),
-         density=c(20,25),
-         angle=c(45,15),
-         cex=1.1,bty="n")
-  }
-
-ninefive = TRUE
-
-if (ninefive)
-  {
-    ninety.five.bounds <- quantile(cntrlmeans,c(0.025,0.975))
-    
-    arrows(x0=ninety.five.bounds[2],y0=y*0.72,x1=ninety.five.bounds[2]*1.9,y1=y*0.72,lwd=1.8)
-    text(x=ninety.five.bounds[2]*2.2,y=y*0.9,
-         paste(round(100*sum(fitline[,2]>ninety.five.bounds[2])/dim(fitline)[1]),
-               " of lines greater\nthan control",sep="%"))
-    arrows(x0=ninety.five.bounds[1],y0=y*0.72,x1=ninety.five.bounds[1]*1.9,y1=y*0.72,lwd=1.8)
-    text(x=ninety.five.bounds[1]*2,y=y*0.9,
-         paste(round(100*sum(fitline[,2]<ninety.five.bounds[1])/dim(fitline)[1]),
-               " of lines\nless than control",sep="%"))
-    abline(v=ninety.five.bounds[1],lwd=1.5,col="gray")
-        abline(v=ninety.five.bounds[2],lwd=1.5,col="gray")
-  } else {
-    
-    arrows(x0=max(cntrlmeans)*1.15,y0=y*0.7,x1=max(c(cntrlmeans,fitline[,2])),y1=y*0.7,lwd=1.8)
-    text(x=max(cntrlmeans)*1.87,y=y*0.9,
-         paste(round(100*sum(fitline[,2]>max(cntrlmeans))/dim(fitline)[1]),
-               " of lines greater than\nmaximum control sample",sep="%"))
-    arrows(x0=min(cntrlmeans)*1.1,y0=y*0.7,x1=min(c(cntrlmeans,fitline[,2])),y1=y*0.7,lwd=1.8)
-    text(x=min(cntrlmeans)*1.5,y=y*0.95,
-         paste(round(100*sum(fitline[,2]<min(cntrlmeans))/dim(fitline)[1]),
-               " of lines\nless than minimum\ncontrol sample",sep="%"))
-    
-  }
-
+<<power-of-sampling,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),cache=F,eval=F>>=
+for (ss in c(2,4,6,8,10))
+    {
+        tmpmerg <- fitmerg %>% group_by(SALK_Line) %>% do(sample_n(.,ss,replace=T))
+        comp2ctrl(tmpmerg,ss)
+    }
 @ 
 
 \subsection{Additions suggested by JEB reviewer 1}
@@ -370,19 +393,15 @@ reviewers.
 I've produced a histogram of effect sizes calculated as t-statistics
 in comparison to the control.  The interval between the blue lines
 indicates lines that are not different than controls after correcting
-the significance of these t-stats using Bonferroni.  There is one line
-to the left of the blue interval and 11 to the right of the blue
-interval(?!).  The interval among the red line corresponds to no
-correction for multiple tests. In this case, 30 lines are lower than
-the red interval and 22 are larger.
+the significance of these t-stats using Bonferroni.  There are 28 lines
+to the left of the blue interval and 8 to the right of the blue
+interval.  The interval among the red line corresponds to no
+correction for multiple tests. In this case, 40 lines are lower than
+the red interval and 19 are larger.
 
 <<contrast-comps,echo=F>>=
 #fitmerg holds the data 
-fitmerg$SALK_Line <- as.factor(fitmerg$SALK_Line)
-fitmerg$SALK_Line <- relevel(fitmerg$SALK_Line,"SALK_CS60000")
-fit.lm <- lm(fitness~SALK_Line,data=fitmerg)
-
-coef.lm <- summary(fit.lm)$coefficients
+coef.lm <- summary(fit.gls.id)$tTable
 coef.lm <- coef.lm[order(coef.lm[,3]),]
 coef.lm <- as.data.frame(coef.lm)
 coef.lm$sig <- ifelse(coef.lm[,4]<=(0.05),TRUE,FALSE)
@@ -401,27 +420,139 @@ with(coef.lm,table(sig,(coef.lm[,3]>0)))
 
 \subsubsection{Multiple test approach using Dunnett's many to one test}
 The classic post-hoc test for comparing many treatments to a control
-is Dunnett's test.  It corrects for multiple tests.
+is Dunnett's test.  It corrects for multiple tests. I'm not totally
+sure that the dunnett test is appropriate with variance weighting, but
+I've seen other people do it.  Ultimately, I might be more confident
+using the straight bonferroni approach from above.  Anyway, the
+results are not really different using this model: 28 less than
+control, 8 greater than control.
+<<echo=F,results='hide'>>=
 
+## Run the following lines. These introduce methods for 'gls' objects.
+## not sure that the dunnett test is appropriate with variance weighting, 
+## but I've seen other people do it.
+model.matrix.gls <- function(object, ...) {
+    model.matrix(terms(object), data = getData(object), ...)
+}
+model.frame.gls <- function(object, ...) {
+    model.frame(formula(object), data = getData(object), ...)
+}
+terms.gls <- function(object, ...) {
+    terms(model.frame(object), ...)
+}
+
+
+@ 
 <<echo=F,cache=T>>=
-fit <- aov(fitdev~SALK_Line,data=fitmerg)
 m1 <- diag(1,120,120)
 K <- as.matrix(cbind(rep(-11,120),m1))
-fit.dunnetts <- glht(fit,linfct=mcp(SALK_Line="Dunnett"))
-#summ.fit.dunnetts <- summary(fit.dunnetts)
+fit.dunnetts <- glht(fit.gls.id,linfct=mcp(SALK_Line="Dunnett"))
+summ.fit.dunnetts <- summary(fit.dunnetts)
 @ 
 
 <<echo=F>>=
-#coef.dun <- data.frame(do.call(cbind,summ.fit.dunnetts$test[5:6]))
-#names(coef.dun) <- c("tvalues","pvalues")
-#coef.dun$sig <- ifelse(coef.dun$pvalues<=0.05,TRUE,FALSE)
-#hist(coef.dun[,1],main="Distribution of effect sizes (t-stats) comparing to control (Dunnett)",xlab="Effect size (t-statistic from Dunnett's test)")
-#abline(v=max(coef.dun[(coef.dun[,"sig"])&(coef.dun[,1]<0),1]), col="blue")
-#abline(v=min(coef.dun[(coef.dun[,"sig"])&(coef.dun[,1]>0),1]), col="blue")
+coef.dun <- data.frame(do.call(cbind,summ.fit.dunnetts$test[5:6]))
+names(coef.dun) <- c("tvalues","pvalues")
+coef.dun$sig <- ifelse(coef.dun$pvalues<=0.05,TRUE,FALSE)
+hist(coef.dun[,1],main="Distribution of effect sizes (t-stats) comparing to control (Dunnett)",xlab="Effect size (t-statistic from Dunnett's test)")
+abline(v=max(coef.dun[(coef.dun[,"sig"])&(coef.dun[,1]<0),1]), col="blue")
+abline(v=min(coef.dun[(coef.dun[,"sig"])&(coef.dun[,1]>0),1]), col="blue")
+print("Numbers of lines that have more extreme fitness than control: dunnett's")
+with(coef.dun,table(sig,(tvalues>0)))
+@ 
+
+\subsubsection{"power analysis" with contrasts}
+
+<<echo=F,cache=F>>=
+
+if (!file.exists("powerdat.rda"))
+    {
+models <- mclapply( rep(c(3:10),100),
+                   mc.cores=3,mc.preschedule=F, 
+                   function(ss)
+                   {
+                       print(ss)
+                                        #        lowreps <- fitmerg[fitmerg$reps<=10,]
+                       hireps <- fitmerg[fitmerg$reps>ss,] %>% group_by(SALK_Line) %>% do(sample_n(.,ss))
+                       tmpmerg <- hireps #rbind(lowreps,hireps)
+                       tmpmerg$SALK_Line <- as.factor(as.character(tmpmerg$SALK_Line))
+                       tmpmerg$SALK_Line <- relevel(tmpmerg$SALK_Line,"SALK_CS60000")
+                       contrasts(tmpmerg$SALK_Line) <- contr.treatment
+                       tmp <- tryCatch(data.frame(summary(gls(fitdev~SALK_Line, weights=varIdent(form=~1|SALK_Line),data=tmpmerg,method="ML"))$tTable),
+                                       error=function(r){NULL})
+                       tmp$bonsig <- tmp$p.value <= 0.05/dim(tmp)[1]
+                       tmp$sign <- ifelse(tmp$t.value>0,1,-1)
+                       c("ss"=ss,table(tmp$bonsig,tmp$sign)[2,]/dim(tmp)[1])
+                   })
+save(file="powerdat.rda",models)
+}else{load("powerdat.rda")}
 
 @ 
 
-\subsubsection{Specific comparisons among a-priori-chosen subsets of genes}
+
+<<power-figs,echo=F,dev=c('pdf','CairoPNG'),out.width="4in">>=
+powdf <- data.frame(do.call(rbind,models[sapply(models,is.numeric)]))
+names(powdf) <- c("n","lower","higher")
+#powdf$both <- powdf$lower+powdf$higher
+#xyplot(jitter(both,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
+#       ylab="Proportion of lines different than control")
+xyplot(jitter(higher,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
+       ylab="Proportion of lines greater than control")
+xyplot(jitter(lower,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
+       ylab="Proportion of lines less than control")
+@ 
+
+
+\subsection{Zero inflated models}
+The data analyzed before do not include seeds that were never sown
+because they did not germinate.  The following analyses trys to
+rectify this. From the histograms below you can see the difference in
+the zero category.
+
+<<compare-data-with-zeros,out.width="4in",echo=F,dev=c('pdf','CairoPNG')>>=
+makereps <- 10
+fitmerg0 <- fitmerg[,c("SALK_Line","fitness","fitdev","abortn")]
+for (sl in unique(as.character(fitmerg0$SALK_Line)))
+    {
+        tmpdf <- fitmerg0[fitmerg0$SALK_Line==sl,]
+        rws <- dim(tmpdf)[1]
+        if (rws<makereps)
+            {
+               newrws <- makereps-rws
+               newdf <- tmpdf[rep(1,newrws),]
+               newdf$fitness <- 0
+               newdf$fitdev <- min(fitmerg0$fitdev)
+               newdf$abortn <- 0
+               fitmerg0 <- rbind(fitmerg0,newdf)
+            }
+    }
+par(mfrow=c(2,1))
+hist(fitmerg$fitness,main="Data without the non-germinants added")
+hist(fitmerg0$fitness,main="Data with the non-germinants added")
+@ 
+
+
+<<glmfits,echo=F>>=
+fit.glm <- glm(fitness~SALK_Line,data=fitmerg0)
+fit.glm.pois <- glm(round(fitness)~SALK_Line,data=fitmerg0,family="poisson")
+@ 
+
+One could argue convincingly that many of the zero fitnesses in these
+data result from more than one process (failure to germinate versus
+failure to survive and reproduce, for example).  In situations like
+this a mixture model might be the way to go.  Below, both models are fit to these data and 
+the negative binomial works better.
+
+<<echo=F>>=
+fitmerg0 <- fitmerg0[fitmerg0$SALK_Line!="SALK_008897C",]
+fitmerg0$SALK_Line <- relevel(as.factor(as.character(fitmerg0$SALK_Line)),"SALK_CS60000")
+fit.zero.nb <- zeroinfl(round(fitness)~SALK_Line, dist="negbin", data=fitmerg0)
+fit.zero.pois <- zeroinfl(round(fitness)~SALK_Line, dist="poisson", data=fitmerg0)
+vuong(fit.zero.pois,fit.zero.nb)
+@ 
+
+
+\subsection{Specific comparisons among a-priori-chosen subsets of genes}
 Here is a comparison of the controls to all mads-box genes
 
 <<fitmads,echo=F,dev=c('pdf','CairoPNG')>>=
@@ -441,9 +572,7 @@ print(summary(aov(fitdev~SALK_Line,fitmads)))
 
 @ 
 
-
-
-<<compare-to-control-back2back,echo=F,fig.keep='none',dev=c('pdf','CairoPNG'),comment=NA>>=
+<<compare-to-control-back2back,echo=F,fig.keep='none',dev=c('pdf','CairoPNG'),comment=NA,eval=F>>=
 b2b <- histbackback(list(cntrlmeans,fitline[,2]),axes=F)
 abline(v=0,lwd=2)
 
@@ -1261,14 +1390,6 @@ Here are analyses that examine the effect of gene family upon survival:
 <<echo=F,comment=NA>>=
 summary(aov(mean.survival~GeneFamilyName,data=surv.by.fam))
 @ 
-
-
-
-
-% 
-
-
-
 
 %
 %
