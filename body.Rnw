@@ -153,7 +153,7 @@ fitmerg <- merge(fitmerg,fam.classes,all.x=T)
 
 fitmerg$SuperGeneFamilyName <- as.character(fitmerg$Gene_Family)
 fitmerg$SuperGeneFamilyName[is.na(fitmerg$SuperGeneFamilyName)|(fitmerg$SuperGeneFamilyName=="NULL")] <- 
-  fitmerg$GeneFamilyName[is.na(fitmerg$SuperGeneFamilyName)|(fitmerg$SuperGeneFamilyName=="NULL")]
+    fitmerg$GeneFamilyName[is.na(fitmerg$SuperGeneFamilyName)|(fitmerg$SuperGeneFamilyName=="NULL")]
 fsdf <- unique(with(fitmerg,(data.frame(FamilySize,SuperGeneFamilyName))))
 fsdf$FamilySize <- as.numeric(as.character(fsdf$FamilySize))
 SFsize <- with(fsdf,aggregate(FamilySize,by=list(SuperGeneFamilyName=SuperGeneFamilyName),sum))
@@ -163,6 +163,33 @@ fitmerg <- merge(fitmerg,SFsize,all.x=T)
 fitmerg <- fitmerg[grep("C",as.character(fitmerg$SALK_Line)),]#make sure there are only confirmed lines included
 fitmerg$SALK_Line <- as.factor(fitmerg$SALK_Line)
 fitmerg$SALK_Line <- relevel(fitmerg$SALK_Line,"SALK_CS60000")
+repcnt <- with(fitmerg,aggregate(fitdev,by=list(SALK_Line=SALK_Line),length))
+names(repcnt)[2] <- "reps"
+fitmerg <- merge(fitmerg,repcnt)
+
+makereps <- 10
+fitmerg0 <- fitmerg
+for (sl in unique(as.character(fitmerg0$SALK_Line)))
+    {
+        tmpdf <- fitmerg0[fitmerg0$SALK_Line==sl,]
+        rws <- dim(tmpdf)[1]
+        if (rws<makereps)
+            {
+               newrws <- makereps-rws
+               newdf <- tmpdf[rep(1,newrws),]
+               newdf$fitness <- 0
+               newdf$fitdev <- min(fitmerg0$fitdev)
+               newdf$abortn <- 0
+               newdf$alive.at.harvest <- NA
+               newdf$mass <- NA
+               fitmerg0 <- rbind(fitmerg0,newdf)
+            }
+    }
+fitmerg0 <- fitmerg0[fitmerg0$SALK_Line!="SALK_008897C",] #no germination at all
+fitmerg0$SALK_Line <- relevel(as.factor(as.character(fitmerg0$SALK_Line)),"SALK_CS60000")
+
+fitmerg.nz <- fitmerg
+fitmerg <- fitmerg0
 
 fruit.by.line <- with(fitmerg,
                      aggregate(cbind(fitness, fitdev, fitdevng, propabort,FamilySize),
@@ -188,9 +215,6 @@ fitmads <- fitmerg[(fitmerg$GeneFamilyName=="MADS-box Transcription Factor Famil
 #fitmerg <- fitmerg[fitmerg$GeneFamilyName!="MADS-box Transcription Factor Family",]
 
 fruit.by.line$cntrl <- ifelse(fruit.by.line$SALK_Line=="SALK_CS60000",T,F)
-repcnt <- with(fitmerg,aggregate(fitdev,by=list(SALK_Line=SALK_Line),length))
-names(repcnt)[2] <- "reps"
-fitmerg <- merge(fitmerg,repcnt)
 
 fitline <- with(fitmerg[(fitmerg$reps>1),],aggregate(fitdev,by=list(SALK_Line=SALK_Line),mean))
 names(fitline)[2] <- "fitdev"
@@ -504,53 +528,154 @@ xyplot(jitter(lower,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
 
 
 \subsection{Zero inflated models}
-The data analyzed before do not include seeds that were never sown
-because they did not germinate.  The following analyses trys to
-rectify this. From the histograms below you can see the difference in
-the zero category.
+These data do include the non-germinated seed categories.  It is
+definitely these zeros that cause all the residual behavior described
+above.
+
+Here are the data with the non-germinants added in and not added in:
 
 <<compare-data-with-zeros,out.width="4in",echo=F,dev=c('pdf','CairoPNG')>>=
-makereps <- 10
-fitmerg0 <- fitmerg[,c("SALK_Line","fitness","fitdev","abortn")]
-for (sl in unique(as.character(fitmerg0$SALK_Line)))
-    {
-        tmpdf <- fitmerg0[fitmerg0$SALK_Line==sl,]
-        rws <- dim(tmpdf)[1]
-        if (rws<makereps)
-            {
-               newrws <- makereps-rws
-               newdf <- tmpdf[rep(1,newrws),]
-               newdf$fitness <- 0
-               newdf$fitdev <- min(fitmerg0$fitdev)
-               newdf$abortn <- 0
-               fitmerg0 <- rbind(fitmerg0,newdf)
-            }
-    }
 par(mfrow=c(2,1))
-hist(fitmerg$fitness,main="Data without the non-germinants added")
-hist(fitmerg0$fitness,main="Data with the non-germinants added")
+hist(fitmerg.nz$fitness,main="Data without the non-germinants added")
+hist(fitmerg$fitness,main="Data with the non-germinants added")
 @ 
 
 
 <<glmfits,echo=F>>=
-fit.glm <- glm(fitness~SALK_Line,data=fitmerg0)
-fit.glm.pois <- glm(round(fitness)~SALK_Line,data=fitmerg0,family="poisson")
+fit.glm <- glm(fitness~SALK_Line,data=fitmerg)
+fit.glm.pois <- glm(round(fitness)~SALK_Line,data=fitmerg,family="poisson")
 @ 
+
+
+So rather than relying on the ridiculously over-parameterized
+independent variance models above, I decided to bite the bullet and
+start working with zero-inflated models.
 
 One could argue convincingly that many of the zero fitnesses in these
 data result from more than one process (failure to germinate versus
 failure to survive and reproduce, for example).  In situations like
-this a mixture model might be the way to go.  Below, both models are fit to these data and 
-the negative binomial works better.
+this a mixture model might be the way to go.  Two such models (zero
+inflated poisson and zero inflated neg binomial) are fit to these data
+and the ad-hoc test below indicates that the negative binomial works
+better.
 
 <<echo=F>>=
-fitmerg0 <- fitmerg0[fitmerg0$SALK_Line!="SALK_008897C",]
-fitmerg0$SALK_Line <- relevel(as.factor(as.character(fitmerg0$SALK_Line)),"SALK_CS60000")
 fit.zero.nb <- zeroinfl(round(fitness)~SALK_Line, dist="negbin", data=fitmerg0)
 fit.zero.pois <- zeroinfl(round(fitness)~SALK_Line, dist="poisson", data=fitmerg0)
 vuong(fit.zero.pois,fit.zero.nb)
 @ 
 
+Check out the residual/fitted plot for the fitness count portion
+
+<<zero-resid,echo=F,out.width="4in",echo=F,dev=c('pdf','CairoPNG')>>=
+plot(resid(fit.zero.pois)~fitted(fit.zero.pois))
+@ 
+
+So we can perform a means-comparisons analysis like the ones described
+above for the zero-inflated data.  Things are a little more
+complicated for a couple of reasons: 1) there are actually two models
+fit, a count model and an inflation model.  We could interpret them as
+the effect of line on the number of fruit after germination and the
+effect of line on germination.  This latter model is a little
+troubling though, because the germination rates are correlated due to
+common germination pot. I don't put much stock in it.  2) there are
+not really post-hoc tests developed for zero-inflated models so the
+bonferroni correction on contrasts is the only real game in town.
+
+When using the bonferroni correction method, there are 20 lines below
+(17\%) and 7 lines greater (6\%).  So lower than the mean-focused
+approach, but still nearly 1/4 show ``phenotypes''.
+
+<<echo=F>>=
+cnts <- data.frame(summary(fit.zero.nb)$coefficients[[1]])
+zeros <- data.frame(summary(fit.zero.nb)$coefficients[[2]])
+names(cnts) <- c("Estimate","StdErr","z","p.value")
+names(zeros) <- paste("zero",names(cnts),sep=".")
+cnts$source <- rownames(cnts)
+zeros$source <- rownames(zeros)
+cnts <- cnts[-c(1,dim(cnts)[1]),]
+zeros <- zeros[-c(1,dim(zeros)[1]),]
+coef.lm <- merge(cnts,zeros)
+coef.lm$bonsig <- coef.lm$p.value<(0.05/115)
+coef.lm$sign <- ifelse(coef.lm$Estimate<0,"below","above")
+coef.lm$zero.bonsig <- coef.lm$zero.p.value<(0.05/115)
+coef.lm$zero.sign <- ifelse(coef.lm$zero.Estimate<0,"below","above")
+@ 
+
+<<zero-cnt-hist,echo=F>>=
+hist(coef.lm$z,main="Histograms of effect sizes for counts")
+lowbon <- max(coef.lm$z[(coef.lm$bonsig)&(coef.lm$z<0)])
+hibon <- min(coef.lm$z[coef.lm$bonsig&(coef.lm$z>=0)])
+abline(v=lowbon,col="blue")
+abline(v=hibon,col="blue")
+with(coef.lm,table(bonsig,sign))[2,]
+@ 
+
+<<zero-zero-hist,echo=F>>=
+hist(coef.lm$zero.z,main="Histograms of effect sizes for counts")
+#lowbon <- max(coef.lm$zero.z[(coef.lm$zero.bonsig)&(coef.lm$zero.z<0)])
+hibon <- min(coef.lm$zero.z[coef.lm$zero.bonsig&(coef.lm$zero.z>=0)])
+#abline(v=lowbon,col="blue")
+abline(v=hibon,col="blue")
+@ 
+
+\subsection{Posthoc power analysis--zero inflated model}
+What follows is basically the same power analysis performed above on the gls models.
+
+<<echo=F>>=
+reptbl <- data.frame(table(fitmerg$SALK_Line))
+names(reptbl) <- c("SALK_Line_char","reps")
+reptbl$SALK_Line_char <- as.character(reptbl$SALK_Line_char)
+fitmerg <- fitmerg[,names(fitmerg)!="reps"]
+fitmerg$SALK_Line_char <- as.character(fitmerg$SALK_Line)
+fitmerg <- merge(fitmerg,reptbl)
+
+if (!file.exists("powerdat-zero.rda"))
+    {
+        models <-do.call(rbind, mclapply( rep(c(2:10),1000),
+                           mc.cores=3,mc.preschedule=F, 
+                           function(ss)
+                           {
+                               print(ss)
+                                        #        lowreps <- fitmerg[fitmerg$reps<=10,]
+                               tmpmerg <- fitmerg[fitmerg$reps>ss,] %>% group_by(SALK_Line) %>% do(sample_n(.,ss))
+                               linemax <- tmpmerg%>%group_by(SALK_Line)%>%summarise(lmax=max(fitness))%>%filter(lmax>0)
+                               tmpmerg <- tmpmerg[as.character(tmpmerg$SALK_Line)%in%as.character(linemax$SALK_Line),]
+                               tmpmerg$SALK_Line <- as.factor(as.character(tmpmerg$SALK_Line))
+                               tmpmerg$SALK_Line <- relevel(tmpmerg$SALK_Line,"SALK_CS60000")
+                               contrasts(tmpmerg$SALK_Line) <- contr.treatment
+                               tmp <- tryCatch(
+                                   data.frame(summary(zeroinfl(round(fitness)~SALK_Line, dist="negbin", data=tmpmerg))$coefficients[[1]]),
+                                               error=function(r){NULL})
+                               if (is.data.frame(tmp))
+                                   {
+                                       names(tmp) <- c("Estimate","StdErr","z","p.value")
+                                       tmp <- tmp[-c(1,dim(tmp)[1]),]
+                                       tmp$bonsig <- tmp$p.value <= 0.05/dim(tmp)[1]
+                                       tmp$sign <- ifelse(tmp$z>0,"above","below")
+                                       c("ss"=ss,table(tmp$bonsig,tmp$sign)[2,]/dim(tmp)[1])
+                                   }
+                           }))
+        save(file="powerdat-zero.rda",models)
+    }else{load("powerdat-zero.rda")}
+
+
+@ 
+
+The following two plots show the relationship between the number of
+plants grown and the ability to detect the proportion of plants that
+have fitness above and below the control.  Note the inflection at a sample size of 7 for the plants with fitness greater than controls.
+
+
+<<power-above,echo=F,dev=c('pdf','CairoPNG'),out.width="4in">>=
+xyplot((jitter(above,500)+0.001)~ss,type=c("p","smooth"),data=models,scales=list(y=list(log=T)),
+       xlab="Sample Size",ylab="Log(proportion lines sig above control)")
+@ 
+
+<<power-below,echo=F,dev=c('pdf','CairoPNG'),out.width="4in">>=
+xyplot((jitter(below,500)+0.001)~ss,type=c("p","smooth"),data=models,scales=list(y=list(log=T)),
+        xlab="Sample Size",ylab="Log(proportion lines sig above control)")
+@ 
 
 \subsection{Specific comparisons among a-priori-chosen subsets of genes}
 Here is a comparison of the controls to all mads-box genes
@@ -638,32 +763,6 @@ axis(1,cex.axis=1.2)
 axis(2,labels=NA)
 box()
 mtext(side=1,at=0.62,line=4.5,"Survive to\nFruiting",cex=1.3)
-@ 
-
-\section{Analysis of fitness}
-
-Taking all SALK lines and pooling them and comparing to the control:
-
-You can see from the resampled line distributions that salk lines and
-controls have similar mean fitnesses, with definite differences in
-variance among groups
-
-<<echo=F>>=
-t.test(fitness~treat,fitmerg)
-kruskal.test(fitmerg$treat,fitmerg$fitness)
-
-tobs <- t.test(fitness~treat,data=fitmerg)$statistic
-tperm <- NULL
-for (i in 1:1000)
-  {
-    tperm <- c(tperm,
-               t.test(fitness~sample(treat,length(treat),replace=F),data=fitmerg)$statistic
-               )
-  }
-
-print("permutation typeI prob:")
-print(sum(tperm>tobs)/length(tperm))
-
 @ 
 
 
