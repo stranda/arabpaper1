@@ -125,6 +125,12 @@ fitin <- read.csv(paste(csvdir,"RedundancyExperiment1-final.csv",sep="/"),header
 
 ### IMPORTANT ASSUMES FIRST COL IS TAGNUM
 names(fitin)[1] <- "tagnum"
+#per.rep.merg <- per.rep.merg[order(per.rep.merg$tagnum),
+#c("GeneFamilyName","SALK_Line","tagnum","fruits.removed",
+#                                     "alive.at.harvest" ,
+#                                     "treat","percent","Gene_Family","Sub_Family",
+#                                     "gene.family.size","cntrl")]
+
 fitmerg <- merge(fitin,per.rep.merg,all.x=T,all.y=T)
 names(fitmerg)[which(names(fitmerg)=="gene.family.size")] <- "FamilySize"
 fitmerg$propabort <- fitmerg$abortn/(fitmerg$fruitnum+fitmerg$abortn)
@@ -181,6 +187,7 @@ for (sl in unique(as.character(fitmerg0$SALK_Line)))
                newdf$fitdev <- min(fitmerg0$fitdev)
                newdf$abortn <- 0
                newdf$alive.at.harvest <- NA
+               newdf$silique <- NA
                newdf$mass <- NA
                fitmerg0 <- rbind(fitmerg0,newdf)
             }
@@ -329,7 +336,7 @@ comp2ctrl <- function(fitdat,
     }
 @ 
 
-<<fig1-compare-to-control,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),cache=T>>=
+<<fig1-compare-to-control,echo=F,fig.keep='high',fig.width=8,fig.height=6.5,dev=c('pdf','CairoPNG'),cache=F>>=
 comp2ctrl(fitmerg)
 @ 
 
@@ -378,7 +385,7 @@ fit.aov <- aov(fitdev~SALK_Line,data=fitmerg)
 plot(resid(fit.aov)~fitted(fit.aov),xlab="Fitted values",ylab="Residuals")
 @ 
 
-<<calc.gls,echo=F,results="hide",cache=T>>=
+<<calc.gls,echo=F,results="hide",cache=T,eval=F>>=
 suppressMessages(require(nlme))
 
 fit.gls <- gls(fitdev~SALK_Line,data=fitmerg,method="REML")
@@ -390,7 +397,7 @@ using a weighting scheme that allows each line to have a separate
 variance (this does add tons of parameters to the model, however).  You can see
 that the heteroschedacity disappears.
 
-<<stand.resid,echo=F,out.width="4in",dev=c('pdf','CairoPNG')>>=
+<<stand.resid,echo=F,out.width="4in",dev=c('pdf','CairoPNG'),eval=F>>=
 plot(resid(fit.gls.id,type="pearson")~fitted(fit.gls.id),
      xlab="Fitted",ylab="Residual",main="Standardized residuals (Pearson resids in R) versus fitted\nGLS model with separate variance estimates")
 @ 
@@ -401,7 +408,7 @@ ratio tests suggest that the extra parameters still produces a much
 better model.  ``fit.gls'' is a ``standard anova'', ``fit.gls.id'' is
 the same model with individual line variance weighting.
 
-<<echo=F>>=
+<<echo=F,eval=F>>=
 anova(fit.gls,fit.gls.id)
 anova(fit.gls.id)
 @ 
@@ -423,7 +430,7 @@ interval.  The interval among the red line corresponds to no
 correction for multiple tests. In this case, 40 lines are lower than
 the red interval and 19 are larger.
 
-<<contrast-comps,echo=F>>=
+<<contrast-comps,echo=F,eval=F>>=
 #fitmerg holds the data 
 coef.lm <- summary(fit.gls.id)$tTable
 coef.lm <- coef.lm[order(coef.lm[,3]),]
@@ -450,7 +457,7 @@ I've seen other people do it.  Ultimately, I might be more confident
 using the straight bonferroni approach from above.  Anyway, the
 results are not really different using this model: 28 less than
 control, 8 greater than control.
-<<echo=F,results='hide'>>=
+<<echo=F,results='hide',eval=F>>=
 
 ## Run the following lines. These introduce methods for 'gls' objects.
 ## not sure that the dunnett test is appropriate with variance weighting, 
@@ -467,14 +474,14 @@ terms.gls <- function(object, ...) {
 
 
 @ 
-<<echo=F,cache=T>>=
+<<echo=F,cache=T,eval=F>>=
 m1 <- diag(1,120,120)
 K <- as.matrix(cbind(rep(-11,120),m1))
 fit.dunnetts <- glht(fit.gls.id,linfct=mcp(SALK_Line="Dunnett"))
 summ.fit.dunnetts <- summary(fit.dunnetts)
 @ 
 
-<<echo=F>>=
+<<echo=F,eval=F>>=
 coef.dun <- data.frame(do.call(cbind,summ.fit.dunnetts$test[5:6]))
 names(coef.dun) <- c("tvalues","pvalues")
 coef.dun$sig <- ifelse(coef.dun$pvalues<=0.05,TRUE,FALSE)
@@ -485,46 +492,6 @@ print("Numbers of lines that have more extreme fitness than control: dunnett's")
 with(coef.dun,table(sig,(tvalues>0)))
 @ 
 
-\subsubsection{"power analysis" with contrasts}
-
-<<echo=F,cache=F>>=
-
-if (!file.exists("powerdat.rda"))
-    {
-models <- mclapply( rep(c(3:10),100),
-                   mc.cores=3,mc.preschedule=F, 
-                   function(ss)
-                   {
-                       print(ss)
-                                        #        lowreps <- fitmerg[fitmerg$reps<=10,]
-                       hireps <- fitmerg[fitmerg$reps>ss,] %>% group_by(SALK_Line) %>% do(sample_n(.,ss))
-                       tmpmerg <- hireps #rbind(lowreps,hireps)
-                       tmpmerg$SALK_Line <- as.factor(as.character(tmpmerg$SALK_Line))
-                       tmpmerg$SALK_Line <- relevel(tmpmerg$SALK_Line,"SALK_CS60000")
-                       contrasts(tmpmerg$SALK_Line) <- contr.treatment
-                       tmp <- tryCatch(data.frame(summary(gls(fitdev~SALK_Line, weights=varIdent(form=~1|SALK_Line),data=tmpmerg,method="ML"))$tTable),
-                                       error=function(r){NULL})
-                       tmp$bonsig <- tmp$p.value <= 0.05/dim(tmp)[1]
-                       tmp$sign <- ifelse(tmp$t.value>0,1,-1)
-                       c("ss"=ss,table(tmp$bonsig,tmp$sign)[2,]/dim(tmp)[1])
-                   })
-save(file="powerdat.rda",models)
-}else{load("powerdat.rda")}
-
-@ 
-
-
-<<power-figs,echo=F,dev=c('pdf','CairoPNG'),out.width="4in">>=
-powdf <- data.frame(do.call(rbind,models[sapply(models,is.numeric)]))
-names(powdf) <- c("n","lower","higher")
-#powdf$both <- powdf$lower+powdf$higher
-#xyplot(jitter(both,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
-#       ylab="Proportion of lines different than control")
-xyplot(jitter(higher,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
-       ylab="Proportion of lines greater than control")
-xyplot(jitter(lower,100)~n,type=c("p","smooth"),data=powdf,xlab="Sample Size",
-       ylab="Proportion of lines less than control")
-@ 
 
 
 \subsection{Zero inflated models}
@@ -602,7 +569,7 @@ coef.lm$zero.bonsig <- coef.lm$zero.p.value<(0.05/115)
 coef.lm$zero.sign <- ifelse(coef.lm$zero.Estimate<0,"below","above")
 @ 
 
-<<zero-cnt-hist,echo=F>>=
+<<zero-cnt-hist,echo=F,dev=c('pdf','CairoPNG')>>=
 hist(coef.lm$z,main="Histograms of effect sizes for counts")
 lowbon <- max(coef.lm$z[(coef.lm$bonsig)&(coef.lm$z<0)])
 hibon <- min(coef.lm$z[coef.lm$bonsig&(coef.lm$z>=0)])
@@ -617,6 +584,12 @@ hist(coef.lm$zero.z,main="Histograms of effect sizes for counts")
 hibon <- min(coef.lm$zero.z[coef.lm$zero.bonsig&(coef.lm$zero.z>=0)])
 #abline(v=lowbon,col="blue")
 abline(v=hibon,col="blue")
+@ 
+
+<<echo=F>>=
+coef.lm$SALK_Line <- gsub("SALK_Line","",coef.lm$source)
+write.csv(file="zero-inf.csv",row.names=F,coef.lm)
+
 @ 
 
 \subsection{Posthoc power analysis--zero inflated model}
@@ -697,41 +670,36 @@ print(summary(aov(fitdev~SALK_Line,fitmads)))
 
 @ 
 
-<<compare-to-control-back2back,echo=F,fig.keep='none',dev=c('pdf','CairoPNG'),comment=NA,eval=F>>=
-b2b <- histbackback(list(cntrlmeans,fitline[,2]),axes=F)
-abline(v=0,lwd=2)
-
-barplot(-b2b$left, col=hcl(h = 30,l = 65, alpha = 0.5) , horiz=TRUE, space=0, add=TRUE, axes=FALSE)
-barplot(b2b$right, col=hcl(h = 210,l = 65, alpha = 0.5), horiz=TRUE, space=0, add=TRUE, axes=FALSE)
-
-
-axis(2,at=0:11,b2b$breaks,cex.axis=1.4)
-axis(1,at=c(-40,-20,0,20),labels=c(40,20,0,20),cex.axis=1.4)
-mtext("Resampled ancestors",side=3,line=1,at=-26,cex=1.4)
-mtext("Salk lines",side=3,line=1,at=16,cex=1.4)
-mtext("Frequency",side=1,line=3,at=-9,cex=1.7)
-
-mtext("Deviation from ancestor fitness",side=2,line=3,cex=1.5)
-
-lowhi <- which(b2b$breaks%in%b2b$breaks[c(range(which(b2b$left>0))[1],range(which(b2b$left>0))[2]+1)])
-
-arrows(y0=lowhi[1]-1,x0=15,y1=which(b2b$breaks==min(b2b$breaks))-1.3,x1=15)
-text(x=26,y=0.47,
-     paste(round(100*sum(fitline[,2]<min(cntrlmeans))/dim(fitline)[1]),
-           " of lines\nless than minimum\ncontrol sample",sep="%"),cex=0.8)
-
-arrows(y0=lowhi[2]-1,x0=15,y1=which(b2b$breaks==max(b2b$breaks))-1,x1=15)
-text(x=26,y=9,
-     paste(round(100*sum(fitline[,2]>max(cntrlmeans))/dim(fitline)[1]),
-           " of lines\ngreater than\nmaximum\ncontrol sample",sep="%"),cex=0.8)
-@ 
 
 \subsection{Fitness components}
-<<splom-fitness-traits,echo=F,fig.keep='none',fig.width=10,fig.height=10,dev=c("pdf","CairoPNG"),comment=NA>>=
+Here is a comparison of all the fitness components pairwise.
+IMPORTANT: I realized in the past day that we do have silique length
+information.  I'm not sure how it was taken, there is only a single
+measurement per plant.  Not sure if this is a haphazardly selected
+silique, the lowest on the inflorescence, or what.  They are not means
+of multiple measures because they always have a 0 or 5 after the
+decimal point (8.5, 6.0, etc).  
+
+<<splom-fitness-traits,echo=F,fig.keep='high',fig.width=11,fig.height=11,dev=c("pdf","CairoPNG"),comment=NA>>=
 #plot(fitline.alldata[,c("fitness","flowers","fruitnum","mass","percent","silique","abortn")])
 fitline.means <- with (fitline.alldata,aggregate(cbind(fitness,flowers,fruitnum,mass,abortn,percent,silique,alive.at.harvest),by=list(SALK_Line=SALK_Line),mean,na.rm=T))
+fitline.means <- rbind(fitline.means[fitline.means$SALK_Line!="SALK_CS60000",],
+                       fitline.means[fitline.means$SALK_Line=="SALK_CS60000",])
 indic=1+(fitline.means$SALK_Line=="SALK_CS60000")
-plot(fitline.means[,-1],pch=c(1,15)[indic],col=indic,cex=c(1,1.4)[indic])
+## put (absolute) correlations on the upper panels,
+## with size proportional to the correlations.
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+pairs(fitline.means[,-1], lower.panel = panel.cor, upper.panel = panel.smooth)
+#plot(fitline.means[,-1],pch=c(1,15)[indic],col=indic,cex=c(1,1.4)[indic])
 #library(ggplot2)
 #plotmatrix(fitline.means[,-1])
 @ 
@@ -1257,7 +1225,9 @@ rect(xleft=2.63,xright=3.27,ytop=212,ybottom=105)
 
 
 
-
+<<>>=
+lns[which(lns%in%fitmads$SALK_Line)]
+@ 
 
 
 

@@ -1,0 +1,383 @@
+%
+% /home/astrand/GoogleDrive/doc/papers/unpak/arabidopsis1/v10/paper1-analysis-figures/powercalcs/body.Rnw
+% $Modified:  Sat Dec  5 11:18:25 CET 2015$
+
+% This is a generic body for a LaTeX document.
+%  It is intended to be inputted into the parent 
+%  document in each directory/document created by LaTeXdoc
+%  all preamble should go in the parent document class
+%
+
+<<echo=F>>=
+suppressMessages({if (!(require(MASS)&require(dplyr)&require(parallel)&require(pscl)&require(ggplot2)))
+    {
+        stop("a library is missing")
+    }})
+@ 
+
+\section{Better power calculations for phenotype detection}
+Based on the JEB reviwer's comments, I decided to do something that I
+should have done a long time ago and try to develop a framework for
+estimating how good we are at detecting phenotypic differences from
+the Columbia background in unpak-style experiments
+
+The reviewer suggested a post-hoc power analysis by resampling
+existing data.  This has known problems and really doesnt address the
+question, what is the probability of detecting an effect?
+
+That more germane question required simulation.
+
+\section{Simulation model}
+
+I decided to simulate a phenotype that has a variance structure as
+close to our experiment (expt1) as possible.  There were several concerns:
+\begin{itemize}
+\item There is a clear mean-variance correlation in the data. Any
+  simulation has to take account of this.
+\item There are two processes (at least) producing zero fitness:
+  \begin{itemize}
+  \item Failure to germinate
+  \item Failure to produce fruit after germination (basically this is
+    death after germination)
+  \end{itemize}
+\item Line means are not normally distributed and the simulations need
+  to produce means from a realistic distribution
+\end{itemize}
+
+The next subsections take these issues in turn.
+\subsection{Mean-variance correlation}
+
+Here is what the correlation between mean and sd within each line look like in our data:
+
+<<echo=F,dev=c('pdf','CairoPNG')>>=
+fitmerg <- read.csv("../csvinputs/fitlines.csv")
+l.mn.sd <- fitmerg%>%group_by(SALK_Line)%>%summarise(mean=mean(fitness),sd=sd(fitness))
+l.mn.sd <- l.mn.sd[complete.cases(l.mn.sd),]
+@ 
+
+<<mean_sd_plots,echo=F,dev=c('pdf','CairoPNG'),warnings=FALSE>>=
+pl <- ggplot(l.mn.sd,aes(mean,sd)) 
+pl <- pl + labs(title="Mean-SD relationship (each salk line separate point)")
+pl <- pl + stat_smooth(method="loess")
+pl <- pl + geom_point()
+pl
+@ 
+
+There's clearly some nonlinearity here. Log-log transform linearizes pretty well.
+
+<<mean_sd_plots_log,echo=F,dev=c('pdf','CairoPNG'),warnings=FALSE>>=
+pl <- ggplot(l.mn.sd,aes(mean,sd)) 
+pl <- pl + labs(title="Mean-SD relationship (each salk line separate point)")
+pl <- pl + scale_x_log10()
+pl <- pl + scale_y_log10()
+pl <- pl + stat_smooth(method="lm")
+pl <- pl + geom_point()
+pl
+@ 
+
+So I am using this second relationship to model the relationship
+between mean and variance in the simulations.  However, the
+non-linearity could be a consequence of a single underlying variance
+across all lines, but near zero, data are left-truncated, making the
+variance ``look'' lower when mean is low.  I will simulate both
+options.
+
+\subsection{Sources of zeros}
+I've added two parameters to the simulations:
+\begin{itemize}
+\item The proportion of non-germinants and
+  
+\item The proportion of germinanting individuals that dies before
+  reproduction
+\end{itemize}
+
+In the simulations presented here, both are held constant, but we
+could vary them pretty easily.
+
+\subsection{Distribution of line means}
+
+Here's what the distribution of line means looks like:
+
+<<line-means-hist,echo=F,dev=c('pdf','CairoPNG')>>=
+pl <- ggplot(l.mn.sd,aes(mean))
+pl <- pl + geom_histogram(binwidth=5)
+pl
+@ 
+
+A weibull distribution fits these means ok.
+
+<<line-means-hist-weibull,echo=F,dev=c('pdf','CairoPNG')>>=
+wf <- fitdistr(l.mn.sd$mean,"weibull")
+pl <- ggplot(l.mn.sd,aes(mean))
+pl <- pl + geom_histogram(binwidth=5, aes(y = ..density..))
+pl <- pl + stat_function(fun=dweibull, args=list(shape=wf[[1]][1],scale=wf[[1]][2]),col="blue")
+pl
+@ 
+
+So the means for each simulation will be pulled at random from the
+Weibull distribution above
+
+\subsection{Simulation algorithm}
+
+\begin{enumerate}
+\item Pick a set of means from the Weibull above.  Right now I am
+  picking 115 to correspond to the 115 Salk lines we have used.
+\item For each mean, choose a standard deviation to be used to
+  generate reps within a line from a normal distribution (we could
+  change this, if necessary) 
+\item Simulate a number of replicate phenotypes from each combination
+  of mean and sd.  This is the main parameter of interest in the
+  simulation (number of reps within a line)
+\item Then simulate a number of reps from the ``control'' or
+  background line.  I've chosen a mean for this line to be
+  approximately where the Columbia line fits in the distribution
+  illustrated in the histograms above.
+\item The controls and non-control lines are then combined into a
+  single dataset.  If we choose 10 for the number of reps per line and
+  120 for the number of control reps, then we have a design pretty
+  close to the actual experiment that we ran.
+\item Then analyze:
+  \begin{enumerate}
+  \item The permutation of background lines approach (using the same
+    algorithm that produced figure 1 in the submitted paper).  There
+    are two criteria employed here:
+    \begin{enumerate}
+    \item A line is considered different if its mean is outside of the
+      range of permuted background lines
+    \item A line is considered different if its mean is outside of the
+      95\%ile of permuted background lines
+    \end{enumerate}
+  \item Contrasts from a Zero inflated model (implemented in the R
+    function zeroinfl from the pscl package).  Here also there are two
+    criteria employed.
+    \begin{enumerate}
+    \item Uncorrected contrasts.  If a line differs from the
+      background at the 0.05 level, then it is considered to be
+      different.
+    \item Bonferroni-corrected contrasts. If a line differs from the
+      background at the 0.05/(number of lines) level, then it is
+      considered to be different.
+    \end{enumerate}
+  \end{enumerate}
+\item And finally report.
+  \begin{enumerate}
+  \item The results are reported below as a series of graphs that
+    explore the relationship between proportion of phenotypes detected
+    above and below the background as a function of reps, variance
+    structure and the number of control reps.
+  \item They are also reported as a function of the difference between
+    the actual proportion of novel phenotypes and the number
+    detected. These plots are probably the most interesting.
+  \end{enumerate}
+\end{enumerate}
+
+<<echo=F>>=
+load("truepower.rda")
+resadj <- res
+resadj$shuffle.range.above <- (1-resadj$shuffle.range.above) - resadj$ctrl.quant
+resadj$shuffle.range.below <-  resadj$ctrl.quant - resadj$shuffle.range.below 
+resadj$shuffle.quant.above <- (1-resadj$shuffle.quant.above) - resadj$ctrl.quant
+resadj$shuffle.quant.below <-  resadj$ctrl.quant - resadj$shuffle.quant.below 
+
+resadj$zero.sig.above <- (1-resadj$zero.sig.above) - resadj$ctrl.quant
+resadj$zero.sig.below <-  resadj$ctrl.quant - resadj$zero.sig.below 
+resadj$zero.bonsig.above <- (1-resadj$zero.bonsig.above) - resadj$ctrl.quant
+resadj$zero.bonsig.below <-  resadj$ctrl.quant - resadj$zero.bonsig.below 
+
+@ 
+
+\section{Proportion of phenotypes detected}
+
+Whenever SD is set at 0, then the mean-variance relationship described
+above is used.  Otherwise the SD is constant at the named value for
+all lines.
+
+<<phenotypes-detected,echo=F,dev=c('pdf','CairoPNG'),warning=FALSE,message=FALSE,error=FALSE>>=
+pl <- ggplot(res,aes(n,shuffle.quant.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (quantiles)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion greater than control detected using the 95% quantile approach")
+pl
+
+
+pl <- ggplot(res,aes(n,shuffle.quant.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (quantiles)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion less than control detected using the 95% quantile approach")
+pl
+
+
+################ranges
+pl <- ggplot(res,aes(n,shuffle.range.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (range)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion greater than control detected using the range approach")
+pl
+
+
+pl <- ggplot(res,aes(n,shuffle.range.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (range)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion less than control detected using the range approach")
+pl
+
+
+#####################zero-inflated models
+pl <- ggplot(res,aes(n,zero.sig.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="ZeroInflated models and contrasts (non-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion greater than control detected using contrasts in ZeroInfl")
+pl
+
+
+pl <- ggplot(res,aes(n,zero.sig.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="ZeroInflated models and contrasts (non-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion less than control detected using contrasts in ZeroInfl")
+
+pl
+
+
+################bonferroni
+pl <- ggplot(res,aes(n,zero.bonsig.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="ZeroInflated models and contrasts (Bonferroni-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion greater than control detected using contrasts in ZeroInfl")
+pl
+
+
+pl <- ggplot(res,aes(n,zero.bonsig.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2)
+pl <- pl + labs(title="ZeroInflated models and contrasts (Bonferroni-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Proportion less than control detected using contrasts in ZeroInfl")
+
+pl
+
+@ 
+
+\section{Difference between phenotypes detected an the actual proportion}
+
+In these plots, numbers on the y-axis can be thought of as bias
+(distance from the estimate to the true number).  Positive bias on
+these plots means that there is typeII error.  The method fails to
+detect all the phenotypes.  Negative bias might be much worse because
+it implies that we are estimating more phenotypes than exist (TypeI
+error).
+
+Basically we can't detect a lot of the phenotypes at our sample sizes.
+Increasing the sample size can help, but there is a levelling off of
+that effect in a lot of cases.  
+
+The number of control reps is important for the randomization
+approach.  The number that we used in our experiment seems safe (120),
+but if you lower that number you start seeing over-estimation of
+phenotypes.
+
+The lack of some sample-size sd and ctrl.reps combinations occurs
+because you cant sample without replacement if there are too few
+control reps.  I didn't simulate these cases to save time on my
+laptop.  It would be perfectly reasonable to simulate and analyze them
+with the zeroinfl model.
+
+<<phenotypes-detected-diff,echo=F,dev=c('pdf','CairoPNG'),warning=FALSE,message=FALSE,error=FALSE>>=
+pl <- ggplot(resadj,aes(n,shuffle.quant.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (quantiles)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference greater than control detected using the 95% quantile approach")
+pl
+
+
+pl <- ggplot(resadj,aes(n,shuffle.quant.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (quantiles)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference less than control detected using the 95% quantile approach")
+pl
+
+
+################ranges
+pl <- ggplot(resadj,aes(n,shuffle.range.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (range)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference greater than control detected using the range approach")
+pl
+
+
+pl <- ggplot(resadj,aes(n,shuffle.range.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="Randomization approach (range)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference less than control detected using the range approach")
+pl
+
+
+#####################zero-inflated models
+pl <- ggplot(resadj,aes(n,zero.sig.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="ZeroInflated models and contrasts (non-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference greater than control detected using contrasts in ZeroInfl")
+pl
+
+
+pl <- ggplot(resadj,aes(n,zero.sig.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="ZeroInflated models and contrasts (non-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference less than control detected using contrasts in ZeroInfl")
+
+pl
+
+
+################bonferroni
+pl <- ggplot(resadj,aes(n,zero.bonsig.above))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2,method="loess")
+pl <- pl + labs(title="ZeroInflated models and contrasts (Bonferroni-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference greater than control detected using contrasts in ZeroInfl")
+pl
+
+
+pl <- ggplot(resadj,aes(n,zero.bonsig.below))
+pl <- pl + geom_point()
+pl <- pl + facet_wrap(~ctrl.reps+sd,labeller=label_both)
+pl <- pl+stat_smooth(size=2)
+pl <- pl + labs(title="ZeroInflated models and contrasts (Bonferroni-corrected)") + xlab("Sample size per line")
+pl <- pl + ylab("Difference less than control detected using contrasts in ZeroInfl")
+
+pl
+
+@ 
+
+%
+%
+%
+% Local Variables: 
+% TeX-master: "powercalcs"
+% End:
+
